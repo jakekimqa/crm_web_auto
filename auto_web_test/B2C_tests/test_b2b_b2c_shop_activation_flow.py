@@ -2,7 +2,7 @@ import os
 import sys
 import re
 import base64
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -19,6 +19,8 @@ CRM_BASE_URL = os.getenv("CRM_BASE_URL", "https://crm-dev4.gongbiz.kr")
 ZERO_BASE_URL = os.getenv("ZERO_BASE_URL", "https://qa-zero.gongbiz.kr")
 CRM_USER_ID = os.getenv("CRM_USER_ID", "autoqatest1")
 CRM_USER_PW = os.getenv("CRM_USER_PW", "gong2023@@")
+KAKAO_ID = os.getenv("KAKAO_ID", "developer@herren.co.kr")
+KAKAO_PW = os.getenv("KAKAO_PW", "herren3378!")
 SHOT_DIR = Path(os.getenv("TEST_SCREENSHOT_DIR", "qa_artifacts/screenshots"))
 SHOT_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -207,7 +209,12 @@ class ShopActivationRunner(B2BAutomationV2):
 
 async def _crm_login(page):
     await page.goto(f"{CRM_BASE_URL}/signin")
-    await page.get_by_role("textbox", name="아이디").fill(CRM_USER_ID)
+    id_field = page.get_by_role("textbox", name="아이디")
+    try:
+        await id_field.wait_for(state="visible", timeout=3000)
+    except Exception:
+        return  # 이미 로그인된 상태 — 스킵
+    await id_field.fill(CRM_USER_ID)
     await page.get_by_role("textbox", name="비밀번호").fill(CRM_USER_PW)
     await page.get_by_role("button", name="로그인").click()
     await page.wait_for_load_state("networkidle")
@@ -266,10 +273,9 @@ async def _set_toggle(page, turn_on: bool):
     await page.wait_for_timeout(700)
 
     if not turn_on:
-        off_confirm = page.locator("button.sc-45a967ab-0.iPNnOp").filter(
-            has_text="비활성화"
-        ).first
+        off_confirm = page.get_by_role("button", name="예약받기 비활성화").first
         await expect(off_confirm).to_be_visible(timeout=10000)
+        page.on("dialog", lambda dialog: dialog.accept())
         await off_confirm.click(force=True)
         await page.wait_for_load_state("networkidle")
         await page.wait_for_timeout(800)
@@ -296,14 +302,229 @@ async def _is_shop_visible_in_nearby(page, shop_name: str) -> bool:
     return False
 
 
+async def _kakao_login(page):
+    await page.goto(f"{ZERO_BASE_URL}/login")
+    await page.wait_for_load_state("networkidle")
+
+    kakao_btn = page.get_by_role("button", name="카카오로 로그인")
+    await expect(kakao_btn).to_be_visible(timeout=10000)
+
+    # 카카오 로그인은 새 창(팝업)으로 열림
+    async with page.expect_popup(timeout=15000) as popup_info:
+        await kakao_btn.click()
+    popup = await popup_info.value
+    await popup.wait_for_load_state("networkidle")
+    await popup.wait_for_timeout(1000)
+
+    # 팝업에서 카카오 로그인 폼 처리
+    id_field = popup.get_by_placeholder("카카오메일 아이디, 이메일, 전화번호")
+    try:
+        await id_field.wait_for(state="visible", timeout=5000)
+    except Exception:
+        # 이미 로그인된 상태 — 팝업이 자동으로 닫힐 수 있음
+        await page.wait_for_timeout(3000)
+        return
+    await id_field.fill(KAKAO_ID)
+    await popup.get_by_placeholder("비밀번호").fill(KAKAO_PW)
+    await popup.get_by_role("button", name="로그인").first.click()
+
+    # 로그인 성공 시 팝업이 자동으로 닫힘 — TargetClosedError 허용
+    try:
+        await popup.wait_for_load_state("networkidle")
+        # 동의 화면이 나타나면 처리
+        agree_btn = popup.locator("button:has-text('동의하고 계속하기')")
+        if await agree_btn.count() > 0 and await agree_btn.is_visible():
+            await agree_btn.click()
+            await popup.wait_for_timeout(3000)
+    except Exception:
+        pass  # 팝업이 닫힌 경우
+
+    # 팝업 완료 후 원래 페이지로 돌아옴
+    await page.wait_for_timeout(3000)
+    await page.wait_for_load_state("networkidle")
+
+    assert "/main" in page.url or "/login" not in page.url, (
+        f"카카오 로그인 실패: {page.url}"
+    )
+
+
+async def _get_shop_id_from_crm(page) -> str:
+    preview_btn = page.get_by_role("button", name="미리보기")
+    await expect(preview_btn).to_be_visible(timeout=10000)
+
+    async with page.expect_popup() as popup_info:
+        await preview_btn.click()
+    preview_page = await popup_info.value
+    await preview_page.wait_for_load_state("networkidle")
+
+    # URL: https://.../shop/S000005093
+    url = preview_page.url
+    shop_id = url.rstrip("/").split("/")[-1]
+    await preview_page.close()
+    return shop_id
+
+
+async def _do_booking_flow(page, shop_id: str):
+    """샵 상세 → 시술 선택 → 날짜/시간 선택 → 결제 페이지까지 진행.
+    Returns (tomorrow datetime, whether payment page reached)."""
+    await page.goto(f"{ZERO_BASE_URL}/shop/{shop_id}")
+    await page.wait_for_load_state("networkidle")
+    await page.wait_for_timeout(1000)
+
+    # 시술 메뉴 선택 (첫 번째 체크박스)
+    service_checkbox = page.get_by_role("checkbox").first
+    await expect(service_checkbox).to_be_visible(timeout=10000)
+    await service_checkbox.click()
+    await page.wait_for_timeout(500)
+
+    # 예약하기 버튼 클릭
+    booking_btn = page.locator("button:has-text('예약하기')").last
+    await expect(booking_btn).to_be_visible(timeout=10000)
+    await booking_btn.click()
+    await page.wait_for_load_state("networkidle")
+    await page.wait_for_timeout(1000)
+
+    # 날짜 선택 (내일)
+    tomorrow = datetime.now() + timedelta(days=1)
+    day_str = str(tomorrow.day)
+    date_btn = page.get_by_role("button", name=day_str, exact=True).first
+    await expect(date_btn).to_be_visible(timeout=10000)
+    await date_btn.click()
+    await page.wait_for_timeout(1000)
+
+    # 시간 선택 (오전 10:00 또는 첫 번째 사용 가능한 시간)
+    time_btn = page.locator("button:has-text('10:00')").first
+    if await time_btn.count() == 0 or not await time_btn.is_visible():
+        time_btn = page.locator("button:has-text(':00'), button:has-text(':30')").first
+    await expect(time_btn).to_be_visible(timeout=10000)
+    await time_btn.click()
+    await page.wait_for_timeout(500)
+
+    # 예약하기 (날짜/시간 선택 페이지) → 결제 페이지로 이동
+    booking_confirm = page.locator("button:has-text('예약하기')").last
+    await expect(booking_confirm).to_be_visible(timeout=10000)
+    await booking_confirm.click()
+    await page.wait_for_load_state("networkidle")
+    await page.wait_for_timeout(2000)
+
+    return tomorrow
+
+
+async def _make_reservation(page, shop_name: str, shop_id: str):
+    print("=== [flow] B2C 예약 진행 시작 ===")
+
+    tomorrow = await _do_booking_flow(page, shop_id)
+
+    page_text = await page.locator("body").inner_text()
+    if "예약 완료" in page_text:
+        pass  # 이미 예약 완료
+    else:
+        await page.screenshot(path=str(SHOT_DIR / "shop_activation_05_payment_page.png"))
+
+        # "카카오로 계속하기" 버튼 처리 — 새 창(팝업)으로 열림
+        kakao_btn = page.locator("button[data-track-id='click_pay_login']")
+        if await kakao_btn.count() > 0 and await kakao_btn.is_visible():
+            print("[reservation] 카카오로 계속하기 버튼 감지 → 팝업 처리")
+            await kakao_btn.scroll_into_view_if_needed()
+            await page.wait_for_timeout(500)
+
+            async with page.expect_popup(timeout=15000) as popup_info:
+                await kakao_btn.click()
+            popup = await popup_info.value
+            await popup.wait_for_load_state("networkidle")
+            await popup.wait_for_timeout(1000)
+            print(f"[reservation] 카카오 팝업 열림: {popup.url}")
+
+            # 팝업에서 카카오 로그인 폼 처리 (이미 로그인됐으면 팝업이 바로 닫힘)
+            try:
+                kakao_id_field = popup.get_by_placeholder("카카오메일 아이디, 이메일, 전화번호")
+                if await kakao_id_field.count() > 0 and await kakao_id_field.is_visible():
+                    await kakao_id_field.fill(KAKAO_ID)
+                    await popup.get_by_placeholder("비밀번호").fill(KAKAO_PW)
+                    await popup.get_by_role("button", name="로그인").first.click()
+
+                # 동의 화면이 나타나면 처리
+                try:
+                    await popup.wait_for_load_state("networkidle")
+                    agree_btn = popup.locator("button:has-text('동의하고 계속하기')")
+                    if await agree_btn.count() > 0 and await agree_btn.is_visible():
+                        await agree_btn.click()
+                except Exception:
+                    pass  # 팝업이 닫힌 경우
+            except Exception:
+                pass  # 팝업이 이미 닫힌 경우 (자동 인증 완료)
+
+            # 팝업 완료 후 원래 페이지 대기
+            await page.wait_for_timeout(3000)
+            await page.wait_for_load_state("networkidle")
+            await page.screenshot(path=str(SHOT_DIR / "shop_activation_05b_after_kakao.png"))
+            print(f"[reservation] 카카오 인증 완료 후 URL: {page.url}")
+
+        # 최종 예약하기 버튼 클릭
+        page_text = await page.locator("body").inner_text()
+        if "예약 완료" not in page_text:
+            final_booking = page.locator("button:has-text('예약하기')").last
+            await expect(final_booking).to_be_visible(timeout=15000)
+            await final_booking.click()
+            await page.wait_for_load_state("networkidle")
+            await page.wait_for_timeout(2000)
+
+    # 예약 완료 확인
+    complete_text = await page.locator("body").inner_text()
+    assert "예약 완료" in complete_text, f"예약 완료 메시지를 확인할 수 없습니다. URL: {page.url}"
+    await page.screenshot(path=str(SHOT_DIR / "shop_activation_06_reservation_complete.png"))
+    print("=== [flow] B2C 예약 완료 ===")
+
+    return tomorrow
+
+
+async def _verify_reservation_on_crm(page, shop_name: str, reservation_date: datetime):
+    print("=== [flow] CRM 캘린더 예약 확인 시작 ===")
+
+    await _switch_shop(page, shop_name)
+
+    # 캘린더 페이지로 이동
+    await page.goto(f"{CRM_BASE_URL}/book/calendar")
+    await page.wait_for_load_state("networkidle")
+    await page.wait_for_timeout(1000)
+
+    # 날짜별 보기로 전환
+    date_view_btn = page.get_by_role("button", name="날짜별")
+    if await date_view_btn.count() > 0 and await date_view_btn.is_visible():
+        await date_view_btn.click()
+        await page.wait_for_timeout(1000)
+
+    # 예약 날짜 선택
+    date_cell = page.locator(
+        f"td[aria-label*='{reservation_date.year}년 {reservation_date.month}월 {reservation_date.day}일']"
+    ).first
+    if await date_cell.count() == 0:
+        date_cell = page.get_by_role("gridcell",
+            name=re.compile(
+                rf"{reservation_date.year}년\s*{reservation_date.month}월\s*{reservation_date.day}일"
+            )
+        ).first
+    await expect(date_cell).to_be_visible(timeout=10000)
+    await date_cell.click()
+    await page.wait_for_load_state("networkidle")
+    await page.wait_for_timeout(1000)
+
+    # 예약 확인 (헤렌테스트)
+    body_text = await page.locator("body").inner_text()
+    assert "헤렌테스트" in body_text, "CRM 캘린더에서 예약자(헤렌테스트)를 찾을 수 없습니다."
+    await page.screenshot(path=str(SHOT_DIR / "shop_activation_07_crm_calendar_verified.png"))
+    print("=== [flow] CRM 캘린더 예약 확인 완료 ===")
+
+
 @pytest.mark.asyncio
 async def test_create_shop_activate_then_verify_b2c_visibility():
     shop_name = f"{datetime.now():%m%d}_배포_테스트"
 
     runner = ShopActivationRunner()
-    runner.headless = False
+    runner.headless = True
     crm_page = None
     zero_page = None
+    zero_context = None
     try:
         await runner.setup()
         await runner.login()
@@ -318,53 +539,59 @@ async def test_create_shop_activate_then_verify_b2c_visibility():
 
         try:
             crm_page = await runner.context.new_page()
-            zero_page = await runner.context.new_page()
+            # B2C 예약은 별도 컨텍스트에서 수행 (카카오 로그인 세션 분리)
+            zero_context = await runner.browser.new_context()
+            zero_page = await zero_context.new_page()
             await crm_page.bring_to_front()
             await _crm_login(crm_page)
             await _switch_shop(crm_page, shop_name)
             await crm_page.screenshot(path=str(SHOT_DIR / "shop_activation_01_initial_crm.png"))
             initial_on = await _is_toggle_on(crm_page)
 
-            if initial_on:
-                await zero_page.bring_to_front()
-                await _open_nearby_list(zero_page)
-                await zero_page.screenshot(path=str(SHOT_DIR / "shop_activation_02_on_nearby_list.png"))
-                assert await _is_shop_visible_in_nearby(zero_page, shop_name), (
-                    "활성화 상태인데 QA-ZERO 내주변 목록에서 샵이 보이지 않습니다."
-                )
-
-                await crm_page.bring_to_front()
-                await _set_toggle(crm_page, turn_on=False)
-                await crm_page.screenshot(path=str(SHOT_DIR / "shop_activation_03_off_applied_crm.png"))
-
-                await zero_page.bring_to_front()
-                await _open_nearby_list(zero_page)
-                await zero_page.screenshot(path=str(SHOT_DIR / "shop_activation_04_off_nearby_list.png"))
-                assert not await _is_shop_visible_in_nearby(zero_page, shop_name), (
-                    "비활성화 후에도 QA-ZERO 내주변 목록에서 샵이 계속 노출됩니다."
-                )
-            else:
-                await zero_page.bring_to_front()
-                await _open_nearby_list(zero_page)
-                await zero_page.screenshot(path=str(SHOT_DIR / "shop_activation_02_off_nearby_list.png"))
-                assert not await _is_shop_visible_in_nearby(zero_page, shop_name), (
-                    "비활성화 상태인데 QA-ZERO 내주변 목록에서 샵이 노출됩니다."
-                )
-
-                await crm_page.bring_to_front()
+            # 토글이 OFF면 먼저 ON으로 전환
+            if not initial_on:
                 await _set_toggle(crm_page, turn_on=True)
-                await crm_page.screenshot(path=str(SHOT_DIR / "shop_activation_03_on_applied_crm.png"))
+                await crm_page.screenshot(path=str(SHOT_DIR / "shop_activation_01b_toggle_on.png"))
 
-                await zero_page.bring_to_front()
-                await _open_nearby_list(zero_page)
-                await zero_page.screenshot(path=str(SHOT_DIR / "shop_activation_04_on_nearby_list.png"))
-                assert await _is_shop_visible_in_nearby(zero_page, shop_name), (
-                    "활성화 후 QA-ZERO 내주변 목록에서 샵이 보이지 않습니다."
-                )
+            # 3. B2C 내주변에서 샵 노출 확인
+            await zero_page.bring_to_front()
+            await _open_nearby_list(zero_page)
+            await zero_page.screenshot(path=str(SHOT_DIR / "shop_activation_02_on_nearby_list.png"))
+            assert await _is_shop_visible_in_nearby(zero_page, shop_name), (
+                "활성화 상태인데 QA-ZERO 내주변 목록에서 샵이 보이지 않습니다."
+            )
+
+            # 4. B2C 예약 진행 (로그인은 결제 페이지에서 팝업으로)
+            await crm_page.bring_to_front()
+            shop_id = await _get_shop_id_from_crm(crm_page)
+
+            await zero_page.bring_to_front()
+            reservation_date = await _make_reservation(zero_page, shop_name, shop_id)
+
+            # 5. CRM 예약 확인 + 공비서로 예약받기 OFF
+            await crm_page.bring_to_front()
+            await _verify_reservation_on_crm(crm_page, shop_name, reservation_date)
+
+            await crm_page.goto(f"{CRM_BASE_URL}/b2c/setting")
+            await crm_page.wait_for_load_state("networkidle")
+            await _set_toggle(crm_page, turn_on=False)
+            await crm_page.screenshot(path=str(SHOT_DIR / "shop_activation_03_off_applied_crm.png"))
+
+            # 6. B2C 내주변 미노출 확인
+            await zero_page.bring_to_front()
+            await _open_nearby_list(zero_page)
+            await zero_page.screenshot(path=str(SHOT_DIR / "shop_activation_04_off_nearby_list.png"))
+            assert not await _is_shop_visible_in_nearby(zero_page, shop_name), (
+                "비활성화 후에도 QA-ZERO 내주변 목록에서 샵이 계속 노출됩니다."
+            )
         finally:
             if zero_page and not zero_page.is_closed():
                 await zero_page.close()
+            if zero_context:
+                await zero_context.close()
             if crm_page and not crm_page.is_closed():
                 await crm_page.close()
     finally:
         await runner.teardown()
+
+
