@@ -454,8 +454,20 @@ async def _make_reservation(page, shop_name: str, shop_id: str):
             except Exception:
                 pass  # 팝업이 이미 닫힌 경우 (자동 인증 완료)
 
-            # 팝업 완료 후 원래 페이지 대기
-            await page.wait_for_timeout(3000)
+            # 팝업 완료 후 원래 페이지 대기 — 카카오 버튼이 사라지고 예약하기로 바뀔 때까지
+            await page.bring_to_front()
+            await page.wait_for_timeout(2000)
+
+            # 카카오 로그인 버튼이 사라질 때까지 대기
+            kakao_gone = page.locator("button[data-track-id='click_pay_login']")
+            try:
+                await kakao_gone.wait_for(state="hidden", timeout=30000)
+            except Exception:
+                # 안 사라지면 페이지 리로드 시도
+                await page.reload()
+                await page.wait_for_load_state("networkidle")
+                await page.wait_for_timeout(2000)
+
             await page.wait_for_load_state("networkidle")
             await page.screenshot(path=str(SHOT_DIR / "shop_activation_05b_after_kakao.png"))
             print(f"[reservation] 카카오 인증 완료 후 URL: {page.url}")
@@ -464,7 +476,15 @@ async def _make_reservation(page, shop_name: str, shop_id: str):
         page_text = await page.locator("body").inner_text()
         if "예약 완료" not in page_text:
             final_booking = page.locator("button:has-text('예약하기')").last
-            await expect(final_booking).to_be_visible(timeout=15000)
+            try:
+                await expect(final_booking).to_be_visible(timeout=15000)
+            except Exception:
+                # 예약하기 버튼 안 보이면 리로드 후 재시도
+                await page.reload()
+                await page.wait_for_load_state("networkidle")
+                await page.wait_for_timeout(2000)
+                final_booking = page.locator("button:has-text('예약하기')").last
+                await expect(final_booking).to_be_visible(timeout=15000)
             await final_booking.click()
             await page.wait_for_load_state("networkidle")
             await page.wait_for_timeout(2000)
