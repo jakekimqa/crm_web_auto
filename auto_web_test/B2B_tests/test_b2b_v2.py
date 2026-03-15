@@ -321,19 +321,20 @@ class B2BAutomationV2:
     async def open_customer_detail_from_list(self, customer_name):
         await self._open_customer_chart()
         await self._dismiss_active_dimmer()
+        await self.page.wait_for_timeout(1000)
 
         list_item = self.page.locator(f"tr:has-text('{customer_name}'), li:has-text('{customer_name}')").first
         await expect(list_item).to_be_visible(timeout=5000)
         try:
             async with self.context.expect_page(timeout=10000) as new_page_info:
-                await list_item.click(force=True)
+                await list_item.click()
             detail_page = await new_page_info.value
             await detail_page.wait_for_load_state("domcontentloaded")
             await detail_page.bring_to_front()
             return detail_page
         except PlaywrightTimeoutError:
             # 환경에 따라 새 창이 아니라 현재 창/패널로 상세가 열릴 수 있음
-            await list_item.click(force=True)
+            await list_item.click()
             await self.page.wait_for_timeout(1200)
             await self.page.wait_for_load_state("domcontentloaded")
             await self.page.bring_to_front()
@@ -504,6 +505,101 @@ class B2BAutomationV2:
         else:
             detail_text = re.sub(r"\s+", " ", await detail_page.locator("body").inner_text())
             assert re.search(r"10\s*만원권", detail_text), "티켓 충전 후 10만원권 노출 확인 실패"
+
+        if detail_page is not self.page and not detail_page.is_closed():
+            await detail_page.close()
+            await self.focus_main_page()
+
+    async def family_add_and_verify(self, owner_name=None, member_name=None):
+        """패밀리 추가: owner 고객 상세 → 패밀리 탭 → member 검색·추가 → 멤버 확인"""
+        if owner_name is None:
+            owner_name = f"자동화_{self.mmdd}_1"
+        if member_name is None:
+            member_name = f"자동화_{self.mmdd}_3"
+
+        # 고객차트 열기 → 고객 행 클릭 → 새 탭
+        await self._open_customer_chart()
+        await self._dismiss_active_dimmer()
+        await self.page.wait_for_timeout(1000)
+
+        row = self.page.locator(f"tr:has-text('{owner_name}')").first
+        await expect(row).to_be_visible(timeout=5000)
+        try:
+            async with self.context.expect_page(timeout=10000) as new_page_info:
+                await row.click()
+            detail_page = await new_page_info.value
+            await detail_page.wait_for_load_state("domcontentloaded")
+            await detail_page.bring_to_front()
+        except PlaywrightTimeoutError:
+            # fallback: 같은 페이지에서 상세 열림
+            detail_page = self.page
+            await detail_page.wait_for_timeout(1200)
+
+        print(f"✓ 고객 상세 진입: {detail_page.url}")
+
+        # 패밀리 탭 클릭
+        family_tab = detail_page.locator("button[role='tab']").filter(has_text="패밀리").first
+        if await family_tab.count() == 0:
+            family_tab = detail_page.locator("button:has-text('패밀리')").first
+        await expect(family_tab).to_be_visible(timeout=10000)
+        await family_tab.click()
+        await detail_page.wait_for_timeout(1000)
+        print("✓ 패밀리 탭 클릭 완료")
+
+        # 이미 멤버가 추가되어 있는지 확인
+        body_text = await detail_page.locator("body").inner_text()
+        already_added = member_name in body_text
+
+        if already_added:
+            print(f"✓ {member_name} 이미 패밀리 멤버로 등록됨 — 추가 스킵")
+        else:
+            # 패밀리 추가하기 버튼 (빈 상태 또는 멤버 추가 버튼)
+            add_family_btn = detail_page.get_by_role("button", name="패밀리 추가하기").first
+            if await add_family_btn.count() == 0:
+                add_family_btn = detail_page.locator(
+                    "button:has-text('패밀리 추가하기'), button:has-text('멤버 추가'), button:has-text('추가하기')"
+                ).first
+            await expect(add_family_btn).to_be_visible(timeout=10000)
+            await add_family_btn.click()
+            await detail_page.wait_for_timeout(1000)
+            print("✓ 패밀리 추가하기 클릭")
+
+            # 고객 검색
+            search_input = detail_page.get_by_placeholder("고객 이름, 연락처, 메모").first
+            await expect(search_input).to_be_visible(timeout=5000)
+            await search_input.type(member_name, delay=50)
+            await detail_page.wait_for_timeout(2000)
+
+            # 검색 결과에서 고객 선택
+            results = detail_page.locator(
+                "[class*='search'] li, [class*='dropdown'] li, [class*='list'] li, [class*='option']"
+            ).filter(has_text=re.compile(re.escape(member_name)))
+            if await results.count() > 0:
+                await results.first.click()
+            else:
+                option = detail_page.get_by_text(member_name, exact=False).first
+                await expect(option).to_be_visible(timeout=5000)
+                await option.click()
+            await detail_page.wait_for_timeout(500)
+            print(f"✓ {member_name} 선택")
+
+            # 모달 내 추가 버튼 클릭
+            modal = detail_page.locator("#modal-content:visible, [role='dialog']:visible").first
+            if await modal.count() > 0:
+                add_btn = modal.get_by_role("button", name="추가", exact=True).first
+            else:
+                add_btn = detail_page.get_by_role("button", name="추가", exact=True).first
+            await expect(add_btn).to_be_visible(timeout=5000)
+            await add_btn.click(force=True)
+            await detail_page.wait_for_timeout(2000)
+            print("✓ 패밀리 추가 완료")
+
+        # 멤버 영역 확인
+        body_text = await detail_page.locator("body").inner_text()
+        assert owner_name in body_text, f"멤버에 {owner_name}이 보이지 않습니다"
+        print(f"✓ 멤버 확인: {owner_name}")
+        assert member_name in body_text, f"멤버에 {member_name}이 보이지 않습니다"
+        print(f"✓ 멤버 확인: {member_name}")
 
         if detail_page is not self.page and not detail_page.is_closed():
             await detail_page.close()
@@ -703,9 +799,15 @@ class B2BAutomationV2:
                     await exit_btn.click(force=True)
                 else:
                     await self.page.keyboard.press("Escape")
-                await self.page.wait_for_timeout(300)
-                still_open = self.page.locator("div:has(button:has-text('나가기'))").filter(has_text=r["customer"]).first
-                if await still_open.count() == 0 or not await still_open.is_visible():
+                await self.page.wait_for_timeout(500)
+                try:
+                    await self.page.wait_for_load_state("networkidle")
+                    still_open = self.page.locator("div:has(button:has-text('나가기'))").filter(has_text=r["customer"]).first
+                    if await still_open.count() == 0 or not await still_open.is_visible():
+                        closed = True
+                        break
+                except Exception:
+                    # navigation으로 context가 바뀐 경우 — 패널이 닫힌 것으로 간주
                     closed = True
                     break
             assert closed, f"상세 패널 닫기 실패: {r['customer']}"

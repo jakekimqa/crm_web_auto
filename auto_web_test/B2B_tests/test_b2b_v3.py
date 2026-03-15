@@ -29,6 +29,11 @@ async def runner():
 
 @pytest_asyncio.fixture(autouse=True)
 async def clean_state(runner):
+    # 이전 테스트에서 열린 extra 탭 닫기 (메인 페이지만 유지)
+    for p in runner.context.pages[1:]:
+        if not p.is_closed():
+            await p.close()
+    await runner.focus_main_page()
     base = runner.base_url.replace("/signin", "")
     await runner.page.goto(f"{base}/book/calendar")
     await runner.page.wait_for_load_state("networkidle")
@@ -51,6 +56,12 @@ async def test_customer_detail_name_from_list(runner):
 async def test_membership_charge_from_customer_detail(runner):
     target_name = f"자동화_{runner.mmdd}_1"
     await runner.membership_charge_and_verify(target_name)
+
+
+async def test_family_share(runner):
+    target_owner = f"자동화_{runner.mmdd}_1"
+    target_member = f"자동화_{runner.mmdd}_3"
+    await runner.family_add_and_verify(target_owner, target_member)
 
 
 async def test_ticket_charge_from_customer_detail(runner):

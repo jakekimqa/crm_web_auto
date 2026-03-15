@@ -1,5 +1,5 @@
 """
-B2C 예약 → B2B 취소 → 취소 사유 검증 → 공비서 예약 OFF → B2C 미노출
+B2C 예약 2건 → B2B 첫 번째 취소 + 사유 검증 → 두 번째 매출 등록 → 공비서 예약 OFF → B2C 미노출
 """
 import os, re, sys, json, urllib.request
 from datetime import datetime, timedelta
@@ -12,7 +12,7 @@ sys.path.append(str(Path(__file__).resolve().parents[2]))
 from auto_web_test.B2C_tests.test_b2b_b2c_shop_activation_flow import (
     ShopActivationRunner, _crm_login, _switch_shop,
     _open_nearby_list, _is_shop_visible_in_nearby,
-    _make_reservation, _is_toggle_on, _set_toggle,
+    _make_reservation, _kakao_login, _is_toggle_on, _set_toggle,
     CRM_BASE_URL, SHOT_DIR,
 )
 
@@ -68,7 +68,85 @@ async def test_b2c_booking_cancel_with_default_reason():
         print(f"  shopId: {shop_id}")
 
         await zero_page.bring_to_front()
+        await _kakao_login(zero_page)
         reservation_date = await _make_reservation(zero_page, shop_name, shop_id)
+        print("  ✓ 첫 번째 예약 완료")
+
+        # ── 두 번째 예약: 컷 > 남성컷 ──
+        print("  --- 두 번째 예약: 컷 > 남성컷 ---")
+        ZERO_BASE_URL = os.getenv("ZERO_BASE_URL", "https://qa-zero.gongbiz.kr")
+        await zero_page.goto(f"{ZERO_BASE_URL}/shop/{shop_id}")
+        await zero_page.wait_for_load_state("networkidle")
+        await zero_page.wait_for_timeout(1000)
+
+        # "컷" 카테고리 선택
+        cut_btn = zero_page.locator("button:has-text('컷')").first
+        await expect(cut_btn).to_be_visible(timeout=10000)
+        await cut_btn.click()
+        await zero_page.wait_for_timeout(1000)
+
+        # "남성컷" 체크박스 선택
+        male_cut = zero_page.locator("label:has-text('남성컷'), span:has-text('남성컷')").first
+        if await male_cut.count() == 0:
+            checkboxes = zero_page.get_by_role("checkbox")
+            count = await checkboxes.count()
+            for i in range(count):
+                cb = checkboxes.nth(i)
+                text = await cb.inner_text()
+                if "남성컷" in text:
+                    male_cut = cb
+                    break
+        await expect(male_cut).to_be_visible(timeout=10000)
+        await male_cut.click()
+        await zero_page.wait_for_timeout(500)
+
+        # 예약하기 버튼
+        booking_btn2 = zero_page.locator("button:has-text('예약하기')").last
+        await expect(booking_btn2).to_be_visible(timeout=10000)
+        await booking_btn2.click()
+        await zero_page.wait_for_load_state("networkidle")
+        await zero_page.wait_for_timeout(1000)
+
+        # 내일 날짜 선택
+        tomorrow = datetime.now() + timedelta(days=1)
+        day_str = str(tomorrow.day)
+        date_btn2 = zero_page.get_by_role("button", name=day_str, exact=True).first
+        await expect(date_btn2).to_be_visible(timeout=10000)
+        await date_btn2.click()
+        await zero_page.wait_for_timeout(1000)
+
+        # 첫 번째 보이는 시간 선택
+        time_buttons2 = zero_page.locator("button:has-text(':00'), button:has-text(':30')")
+        second_time_btn = time_buttons2.first
+        await expect(second_time_btn).to_be_visible(timeout=10000)
+        second_time_text = await second_time_btn.inner_text()
+        await second_time_btn.click()
+        await zero_page.wait_for_timeout(500)
+        print(f"  두 번째 예약 시간: {second_time_text}")
+
+        # 예약하기 → 결제 페이지
+        booking_confirm2 = zero_page.locator("button:has-text('예약하기')").last
+        await expect(booking_confirm2).to_be_visible(timeout=10000)
+        await booking_confirm2.click()
+        await zero_page.wait_for_load_state("networkidle")
+        await zero_page.wait_for_timeout(2000)
+
+        # 결제 페이지: 동의 체크 → 최종 예약하기
+        agree_check2 = zero_page.locator("label:has-text('위 내용을 확인하였으며'), input[type='checkbox']").first
+        if await agree_check2.count() > 0:
+            await agree_check2.click()
+            await zero_page.wait_for_timeout(500)
+
+        final_booking2 = zero_page.locator("button:has-text('예약하기')").last
+        await expect(final_booking2).to_be_visible(timeout=10000)
+        await final_booking2.click()
+        await zero_page.wait_for_load_state("networkidle")
+        await zero_page.wait_for_timeout(2000)
+
+        assert "bookingId" in zero_page.url or "예약 완료" in await zero_page.locator("body").inner_text(), \
+            f"두 번째 예약 실패: {zero_page.url}"
+        await zero_page.screenshot(path=str(SHOT_DIR / "cancel_00_second_booking.png"))
+        print("  ✓ 두 번째 예약 완료 (컷 > 남성컷)")
         print("✓ Phase 2 완료\n")
 
         # ── Phase 3: 캘린더 → 내일 이동 → 상세 → 취소 ──
@@ -108,31 +186,17 @@ async def test_b2c_booking_cancel_with_default_reason():
             else:
                 break
 
-        # 내일 날짜로 이동 (오른쪽 화살표 클릭)
+        # 내일 날짜로 이동 (fc-next-button)
         d = reservation_date
         target = f"3. {d.day}"
         body = await crm_page.locator("body").inner_text()
         if target not in body:
-            # 오른쪽 화살표 (날짜 헤더 옆, x~1860 위치)
-            arrows = await crm_page.evaluate('''() => {
-                return Array.from(document.querySelectorAll('button'))
-                    .filter(b => b.offsetParent !== null && b.querySelector('svg') && b.textContent.trim() === '')
-                    .map((b, i) => ({
-                        i, x: b.getBoundingClientRect().x, y: b.getBoundingClientRect().y,
-                        w: b.getBoundingClientRect().width
-                    }))
-                    .filter(a => a.y < 50 && a.w < 40);
-            }''')
-            # 가장 오른쪽에 있는 화살표 = 다음 날
-            if arrows:
-                right_arrow = max(arrows, key=lambda a: a["x"])
-                all_btns = crm_page.locator("button")
-                arrow_btn = all_btns.nth(right_arrow["i"])
-                # 찾은 인덱스가 아닌 좌표로 직접 클릭
-                await crm_page.mouse.click(right_arrow["x"] + 10, right_arrow["y"] + 10)
-                await crm_page.wait_for_load_state("networkidle")
-                await crm_page.wait_for_timeout(2000)
-                print(f"  ✓ 내일({d.month}/{d.day})로 이동")
+            next_btn = crm_page.locator("button.fc-next-button").first
+            await expect(next_btn).to_be_visible(timeout=10000)
+            await next_btn.click()
+            await crm_page.wait_for_load_state("networkidle")
+            await crm_page.wait_for_timeout(2000)
+            print(f"  ✓ 내일({d.month}/{d.day})로 이동")
         else:
             print(f"  ✓ 이미 내일({d.month}/{d.day}) 표시 중")
 
@@ -145,17 +209,14 @@ async def test_b2c_booking_cancel_with_default_reason():
             else:
                 break
 
-        # 예약 블록 클릭 → 상세 페이지로 이동
-        block = crm_page.locator("div.booking-normal").filter(has_text="헤렌테스트").first
-        if await block.count() == 0:
-            block = crm_page.locator("div.booking-normal").first
-        if await block.count() == 0:
-            block = crm_page.get_by_text("헤렌테스트").first
+        # 첫 번째 예약 블록 클릭 → 상세 페이지로 이동
+        block = crm_page.locator("div.booking-normal").first
         await expect(block).to_be_visible(timeout=15000)
         await block.click(force=True)
         await crm_page.wait_for_timeout(3000)
         await crm_page.wait_for_load_state("networkidle")
-        print(f"  ✓ 상세 페이지: {crm_page.url}")
+        first_detail_url = crm_page.url
+        print(f"  ✓ 상세 페이지: {first_detail_url}")
 
         # 공비서 마크 확인
         b2c = crm_page.locator("svg[icon='serviceB2c'], svg.ZERO_B2C").first
@@ -217,43 +278,10 @@ async def test_b2c_booking_cancel_with_default_reason():
         print("=== Phase 4: 취소 사유 검증 ===")
         await crm_page.wait_for_timeout(2000)
 
-        # 취소 후 캘린더로 돌아왔으므로, 내일로 이동 → 취소된 예약 클릭 → 상세
-        # 내일 날짜로 이동 (오른쪽 화살표)
-        body = await crm_page.locator("body").inner_text()
-        target = f"3. {d.day}"
-        if target not in body:
-            arrows = await crm_page.evaluate("""() => {
-                return Array.from(document.querySelectorAll('button'))
-                    .filter(b => b.offsetParent !== null && b.querySelector('svg') && b.textContent.trim() === '')
-                    .map((b, i) => ({
-                        i, x: b.getBoundingClientRect().x, y: b.getBoundingClientRect().y,
-                        w: b.getBoundingClientRect().width
-                    }))
-                    .filter(a => a.y < 50 && a.w < 40);
-            }""")
-            if arrows:
-                ra = max(arrows, key=lambda a: a["x"])
-                await crm_page.mouse.click(ra["x"] + 10, ra["y"] + 10)
-                await crm_page.wait_for_load_state("networkidle")
-                await crm_page.wait_for_timeout(2000)
-
-        # 딤머 닫기
-        for _ in range(3):
-            dim = crm_page.locator("#modal-dimmer.isActiveDimmed:visible").first
-            if await dim.count() > 0:
-                await dim.click(force=True)
-                await crm_page.wait_for_timeout(500)
-            else:
-                break
-
-        # 취소된 예약 블록 클릭 → 상세 페이지
-        cc = crm_page.locator("div.booking-normal").filter(has_text="헤렌테스트").first
-        if await cc.count() == 0:
-            cc = crm_page.get_by_text("헤렌테스트").first
-        await expect(cc).to_be_visible(timeout=15000)
-        await cc.click(force=True)
-        await crm_page.wait_for_timeout(3000)
+        # 취소된 예약 상세로 직접 이동
+        await crm_page.goto(first_detail_url)
         await crm_page.wait_for_load_state("networkidle")
+        await crm_page.wait_for_timeout(2000)
         await crm_page.screenshot(path=str(SHOT_DIR / "cancel_04_detail.png"))
 
         # 상세 페이지에서 배너 확인
@@ -274,6 +302,123 @@ async def test_b2c_booking_cancel_with_default_reason():
         print("  ✓ 취소 사유 일치!")
         await crm_page.screenshot(path=str(SHOT_DIR / "cancel_05_verified.png"))
         print("✓ Phase 4 완료\n")
+
+        # ── Phase 4.5: 두 번째 예약 매출 등록 ──
+        print("=== Phase 4.5: 두 번째 예약 매출 등록 ===")
+        await crm_page.goto(f"{CRM_BASE_URL}/book/calendar")
+        await crm_page.wait_for_load_state("networkidle")
+        await crm_page.wait_for_timeout(2000)
+
+        # 딤머 닫기
+        for _ in range(5):
+            dim = crm_page.locator("#modal-dimmer.isActiveDimmed:visible").first
+            if await dim.count() > 0:
+                await dim.click(force=True)
+                await crm_page.wait_for_timeout(500)
+            else:
+                break
+
+        # "일" 보기
+        for name in ["일", "날짜별"]:
+            btn = crm_page.get_by_role("button", name=name).first
+            if await btn.count() > 0 and await btn.is_visible():
+                await btn.click()
+                await crm_page.wait_for_load_state("networkidle")
+                await crm_page.wait_for_timeout(1500)
+                break
+
+        # 딤머 닫기
+        for _ in range(3):
+            dim = crm_page.locator("#modal-dimmer.isActiveDimmed:visible").first
+            if await dim.count() > 0:
+                await dim.click(force=True)
+                await crm_page.wait_for_timeout(500)
+            else:
+                break
+
+        # 내일로 이동
+        body = await crm_page.locator("body").inner_text()
+        if f"3. {d.day}" not in body:
+            next_btn = crm_page.locator("button.fc-next-button").first
+            await expect(next_btn).to_be_visible(timeout=10000)
+            await next_btn.click()
+            await crm_page.wait_for_load_state("networkidle")
+            await crm_page.wait_for_timeout(2000)
+
+        # 딤머 닫기
+        for _ in range(3):
+            dim = crm_page.locator("#modal-dimmer.isActiveDimmed:visible").first
+            if await dim.count() > 0:
+                await dim.click(force=True)
+                await crm_page.wait_for_timeout(500)
+            else:
+                break
+
+        # 남은 활성 예약 블록 클릭
+        male_block = crm_page.locator("div.booking-normal").first
+        await expect(male_block).to_be_visible(timeout=15000)
+        await male_block.click(force=True)
+        await crm_page.wait_for_timeout(3000)
+        await crm_page.wait_for_load_state("networkidle")
+        second_detail_url = crm_page.url
+        print(f"  ✓ 두 번째 예약 상세: {second_detail_url}")
+
+        # 예약일시 확인
+        detail_text = await crm_page.locator("body").inner_text()
+        assert f"{d.day}" in detail_text, "예약일시 확인 실패"
+        print(f"  ✓ 예약일시 확인: {d.month}/{d.day}")
+
+        # 시술 메뉴 확인
+        if "남성컷" in detail_text:
+            print("  ✓ 시술 메뉴: 남성컷 확인")
+        elif "여성컷" in detail_text:
+            print("  ✓ 시술 메뉴: 여성컷 확인")
+        await crm_page.screenshot(path=str(SHOT_DIR / "cancel_05a_male_detail.png"))
+
+        # [매출 등록] 버튼 클릭
+        sales_btn = crm_page.locator("h4:has-text('매출 등록'), button:has-text('매출 등록')").first
+        await expect(sales_btn).to_be_visible(timeout=10000)
+        await sales_btn.click()
+        await crm_page.wait_for_load_state("networkidle")
+        await crm_page.wait_for_timeout(2000)
+        print(f"  ✓ 매출 등록 페이지: {crm_page.url}")
+
+        # 남은 결제 금액 확인
+        sales_text = await crm_page.locator("body").inner_text()
+        if "18,000" in sales_text:
+            print("  ✓ 남은 결제 금액: 18,000원 (남성컷)")
+        elif "20,000" in sales_text:
+            print("  ✓ 남은 결제 금액: 20,000원 (여성컷)")
+        await crm_page.screenshot(path=str(SHOT_DIR / "cancel_05b_sales_page.png"))
+
+        # 결제 수단: 카드 선택
+        card_btn = crm_page.get_by_text("카드", exact=True).first
+        if await card_btn.count() == 0:
+            card_btn = crm_page.locator("button:has-text('카드'), label:has-text('카드')").first
+        await expect(card_btn).to_be_visible(timeout=10000)
+        await card_btn.click()
+        await crm_page.wait_for_timeout(500)
+        print("  ✓ 결제 수단: 카드 선택")
+
+        # 매출 저장
+        save_btn = crm_page.locator("button:has-text('매출 저장')").first
+        await expect(save_btn).to_be_visible(timeout=10000)
+        await save_btn.click()
+        await crm_page.wait_for_load_state("networkidle")
+        await crm_page.wait_for_timeout(3000)
+        print("  ✓ 매출 저장 완료")
+
+        # 매출 등록 완료 확인
+        await crm_page.goto(second_detail_url)
+        await crm_page.wait_for_load_state("networkidle")
+        await crm_page.wait_for_timeout(2000)
+        sales_label = crm_page.locator("h4.SALE.disabled:has-text('매출 등록')").first
+        if await sales_label.count() == 0:
+            sales_label = crm_page.locator("h4:has-text('매출 등록')").first
+        await expect(sales_label).to_be_visible(timeout=10000)
+        print("  ✓ 매출 등록 완료 상태 확인")
+        await crm_page.screenshot(path=str(SHOT_DIR / "cancel_05c_sales_done.png"))
+        print("✓ Phase 4.5 완료\n")
 
         # ── Phase 5: 공비서 예약 OFF → B2C 미노출 ──
         print("=== Phase 5: 공비서 예약 OFF → B2C 미노출 ===")
