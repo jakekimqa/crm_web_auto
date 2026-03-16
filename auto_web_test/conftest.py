@@ -104,10 +104,12 @@ from datetime import datetime
 from pathlib import Path
 import pytest
 
-# .env 파일 자동 로드
+# .env 파일 자동 로드 (B2B_BASE_URL에 crm.gongbiz.kr이 있으면 prod, 아니면 dev)
 try:
     from dotenv import load_dotenv
-    _env_file = Path(__file__).parent / ".env.dev"
+    _base_url = os.getenv("B2B_BASE_URL", "")
+    _is_prod = "crm.gongbiz.kr" in _base_url and "crm-dev" not in _base_url
+    _env_file = Path(__file__).parent / (".env.prod" if _is_prod else ".env.dev")
     if _env_file.exists():
         load_dotenv(_env_file, override=False)
 except ImportError:
@@ -329,15 +331,29 @@ def pytest_sessionfinish(session, exitstatus):
             flow_lines.append("- 티켓 충전 완료")
         if case_map.get("test_make_reservations") == "PASS":
             flow_lines.append("- 예약 등록 완료")
-        if case_map.get("test_sales_registrations_1_to_4") == "PASS":
+        if case_map.get("test_sales_registrations_1_to_5") == "PASS":
+            flow_lines.append("- 매출등록 1~5 완료 (패밀리 공유 정액권 포함)")
+        elif case_map.get("test_sales_registrations_1_to_4") == "PASS":
             flow_lines.append("- 매출등록 1~4 완료")
         flow_block = "\n".join(flow_lines)
 
         pass_count = sum(1 for s in case_map.values() if s == "PASS")
         fail_count = sum(1 for s in case_map.values() if s in ("FAIL", "ERROR"))
         skip_count = sum(1 for s in case_map.values() if s == "SKIP")
+        # 환경 표시 (dev/prod 구분)
+        _base = os.getenv("B2B_BASE_URL", "")
+        if "crm-dev" in _base:
+            import re as _re
+            _m = _re.search(r"(crm-dev\d*\.gongbiz\.kr)", _base)
+            env_label = _m.group(1) if _m else _base.split("//")[-1].split("/")[0]
+        elif "crm.gongbiz.kr" in _base:
+            env_label = "crm.gongbiz.kr (운영)"
+        else:
+            env_label = _base.split("//")[-1].split("/")[0] if _base else "unknown"
+
         msg = (
             f"{status_text}\n"
+            f"환경: {env_label}\n"
             f"실행 파일: {file_label}\n"
             f"결과 요약: PASS {pass_count} / FAIL {fail_count} / SKIP {skip_count}\n"
             f"소요시간: {duration:.2f}s | 시각: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n"

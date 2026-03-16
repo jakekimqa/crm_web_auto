@@ -1000,6 +1000,75 @@ class B2BAutomationV2:
         await self._click_sales_save_button()
         print("✓ 매출 등록 4 완료")
 
+    async def sales_registrations_5(self, customer_override=None):
+        """패밀리 공유 정액권 매출등록: 고객_3이 고객_1의 정액권으로 결제"""
+        customer = customer_override or f"자동화_{self.mmdd}_3"
+        print(f"{customer} 패밀리 공유 정액권 매출등록 시작=====")
+
+        # 매출등록 4 저장 후 목록 페이지로 돌아올 때까지 대기
+        await self.page.locator(".new-item").first.wait_for(state="visible", timeout=10000)
+        await self.page.locator(".new-item").first.click()
+        await self.page.wait_for_load_state("networkidle")
+        await self.page.wait_for_timeout(500)
+
+        # 고객 검색
+        search_input = self.page.locator("#customer-search")
+        await expect(search_input).to_be_visible(timeout=5000)
+        await search_input.click()
+        await search_input.type(customer, delay=50)
+        await self.page.wait_for_timeout(1000)
+
+        # 검색 결과에서 고객 선택
+        result_item = self.page.locator(
+            f"li:has-text('{customer}'), [role='option']:has-text('{customer}'), "
+            f"div[class*='list'] div:has-text('{customer}'), "
+            f"button:has-text('{customer}')"
+        ).locator(":visible").first
+        await expect(result_item).to_be_visible(timeout=5000)
+        await result_item.click()
+        await self.page.wait_for_timeout(500)
+
+        # 시술 메뉴 선택: 손 > 케어
+        service_select = self.page.locator(
+            "button.select-display:visible, div.select-display:visible, "
+            "[class*='select']:visible"
+        ).filter(has_text=re.compile(r"시술.*선택")).first
+        await expect(service_select).to_be_visible(timeout=5000)
+        await service_select.click()
+        await self.page.wait_for_timeout(300)
+
+        # 그룹 '손' 선택
+        group_btn = self.page.locator(
+            "button:has-text('손'):visible, li:has-text('손'):visible, [role='option']:has-text('손'):visible"
+        ).first
+        await expect(group_btn).to_be_visible(timeout=5000)
+        await group_btn.click()
+        await self.page.wait_for_timeout(300)
+
+        # 시술 '케어' 선택
+        item_btn = self.page.locator(
+            "button:has-text('케어'):visible, li:has-text('케어'):visible, [role='option']:has-text('케어'):visible"
+        ).first
+        await expect(item_btn).to_be_visible(timeout=5000)
+        await item_btn.click()
+        await self.page.wait_for_timeout(500)
+
+        # 정액권 input 확인 (패밀리 공유 검증 핵심)
+        membership_input = self.page.locator('input[name*="정액권"]').nth(1)
+        await expect(membership_input).to_be_visible(timeout=5000)
+        print("✓ 패밀리 공유 정액권 input 확인됨")
+
+        # 시술 금액 가져와서 전액 정액권으로 입력
+        total_text = await self.page.locator("h2:visible").filter(
+            has_text=re.compile(r"원")
+        ).first.text_content()
+        amount = re.sub(r"[^\d]", "", total_text)
+        await membership_input.click()
+        await membership_input.fill(amount)
+
+        await self._click_sales_save_button()
+        print(f"✓ 매출 등록 5 완료 (패밀리 공유 정액권 {amount}원)")
+
     async def verify_shop_status_today_summary(self, expected_sales=None, expected_reservations=None):
         await self.focus_main_page()
 
@@ -1223,8 +1292,8 @@ class B2BAutomationV2:
         assert product_sales == 320000, f"상품별 통계 실 매출 합계 불일치: {product_sales}"
         assert product_membership == 200000, f"상품별 통계 정액권 판매 불일치: {product_membership}"
         assert product_ticket == 100000, f"상품별 통계 티켓 판매 불일치: {product_ticket}"
-        assert product_total == 360000, f"상품별 통계 총 합계 불일치: {product_total}"
-        print("✓ 상품별 통계 검증 완료: 실매출 320,000 / 정액권 200,000 / 티켓 100,000 / 총합계 360,000")
+        assert product_total == 370000, f"상품별 통계 총 합계 불일치: {product_total}"
+        print("✓ 상품별 통계 검증 완료: 실매출 320,000 / 정액권 200,000 / 티켓 100,000 / 총합계 370,000")
         await self._go_back_from_statistics_detail()
 
         await self._open_stat_detail("결제 수단별 통계")
@@ -1238,9 +1307,9 @@ class B2BAutomationV2:
         payment_deduct = await self._get_table_value_by_header(payment_table, "차감 합계", row=payment_row)
         payment_total = await self._get_table_value_by_header(payment_table, "총 합계", row=payment_row)
         assert payment_sales == 320000, f"결제수단 통계 실 매출 합계 불일치: {payment_sales}"
-        assert payment_deduct == 40000, f"결제수단 통계 차감 합계 불일치: {payment_deduct}"
-        assert payment_total == 360000, f"결제수단 통계 총 합계 불일치: {payment_total}"
-        print("✓ 결제 수단별 통계 검증 완료: 실매출 320,000 / 차감 40,000 / 총합계 360,000")
+        assert payment_deduct == 50000, f"결제수단 통계 차감 합계 불일치: {payment_deduct}"
+        assert payment_total == 370000, f"결제수단 통계 총 합계 불일치: {payment_total}"
+        print("✓ 결제 수단별 통계 검증 완료: 실매출 320,000 / 차감 50,000 / 총합계 370,000")
 
 
 @pytest.mark.asyncio

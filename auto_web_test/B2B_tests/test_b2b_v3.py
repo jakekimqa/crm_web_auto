@@ -77,11 +77,12 @@ async def test_verify_calendar_reservations(runner):
     await runner.verify_calendar_reservations()
 
 
-async def test_sales_registrations_1_to_4(runner):
+async def test_sales_registrations_1_to_5(runner):
     await runner.sales_registrations_1()
     await runner.sales_registrations_2()
     await runner.sales_registrations_3()
     await runner.sales_registrations_4()
+    await runner.sales_registrations_5()
 
 
 async def test_verify_shop_status_today_summary(runner):
