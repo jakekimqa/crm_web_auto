@@ -256,6 +256,73 @@ async def test_b2c_booking_cancel_with_default_reason():
             f"두 번째 예약 실패: {zero_page.url}"
         await zero_page.screenshot(path=str(SHOT_DIR / "cancel_00_second_booking.png"))
         print("  ✓ 두 번째 예약 완료 (컷 > 남성컷)")
+
+        # ── 세 번째 예약: 담당자 테스트_직원계정1 ──
+        print("  --- 세 번째 예약: 담당자 테스트_직원계정1 ---")
+        await zero_page.goto(f"{ZERO_BASE_URL}/shop/{shop_id}")
+        await zero_page.wait_for_load_state("networkidle")
+        await zero_page.wait_for_timeout(1000)
+
+        # 시술 메뉴 선택 (첫 번째 체크박스)
+        service_cb3 = zero_page.get_by_role("checkbox").first
+        await expect(service_cb3).to_be_visible(timeout=10000)
+        await service_cb3.click()
+        await zero_page.wait_for_timeout(500)
+
+        # 예약하기 버튼
+        booking_btn3 = zero_page.locator("button:has-text('예약하기')").last
+        await expect(booking_btn3).to_be_visible(timeout=10000)
+        await booking_btn3.click()
+        await zero_page.wait_for_load_state("networkidle")
+        await zero_page.wait_for_timeout(1000)
+
+        # 담당자 선택: 테스트_직원계정1 (두 번째 [선택] 버튼)
+        await expect(zero_page.locator("text=테스트_직원계정1").first).to_be_visible(timeout=5000)
+        select_buttons = zero_page.locator("button:has-text('선택')")
+        select_btn3 = select_buttons.nth(1)  # 0: 샵주테스트, 1: 테스트_직원계정1
+        await expect(select_btn3).to_be_visible(timeout=5000)
+        await select_btn3.click()
+        await zero_page.wait_for_load_state("networkidle")
+        await zero_page.wait_for_timeout(1000)
+        print("  ✓ 담당자 선택: 테스트_직원계정1")
+
+        # 내일 날짜 선택
+        date_btn3 = zero_page.get_by_role("button", name=str(tomorrow.day), exact=True).first
+        await expect(date_btn3).to_be_visible(timeout=10000)
+        await date_btn3.click()
+        await zero_page.wait_for_timeout(1000)
+
+        # 첫 번째 보이는 시간 선택
+        time_btn3 = zero_page.locator("button:has-text(':00'), button:has-text(':30')").first
+        await expect(time_btn3).to_be_visible(timeout=10000)
+        third_time_text = await time_btn3.inner_text()
+        await time_btn3.click()
+        await zero_page.wait_for_timeout(500)
+        print(f"  세 번째 예약 시간: {third_time_text}")
+
+        # 예약하기 → 결제 페이지
+        booking_confirm3 = zero_page.locator("button:has-text('예약하기')").last
+        await expect(booking_confirm3).to_be_visible(timeout=10000)
+        await booking_confirm3.click()
+        await zero_page.wait_for_load_state("networkidle")
+        await zero_page.wait_for_timeout(2000)
+
+        # 결제 페이지: 동의 체크 → 최종 예약하기
+        agree_check3 = zero_page.locator("label:has-text('위 내용을 확인하였으며'), input[type='checkbox']").first
+        if await agree_check3.count() > 0:
+            await agree_check3.click()
+            await zero_page.wait_for_timeout(500)
+
+        final_booking3 = zero_page.locator("button:has-text('예약하기')").last
+        await expect(final_booking3).to_be_visible(timeout=10000)
+        await final_booking3.click()
+        await zero_page.wait_for_load_state("networkidle")
+        await zero_page.wait_for_timeout(2000)
+
+        assert "bookingId" in zero_page.url or "예약 완료" in await zero_page.locator("body").inner_text(), \
+            f"세 번째 예약 실패: {zero_page.url}"
+        await zero_page.screenshot(path=str(SHOT_DIR / "cancel_00_third_booking.png"))
+        print("  ✓ 세 번째 예약 완료 (담당자: 테스트_직원계정1)")
         print("✓ Phase 2 완료\n")
 
         # ── Phase 3: 캘린더 → 내일 이동 → 상세 → 취소 ──
