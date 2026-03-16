@@ -402,6 +402,16 @@ async def _do_booking_flow(page, shop_id: str):
     await page.wait_for_load_state("networkidle")
     await page.wait_for_timeout(1000)
 
+    # 담당자 선택 (2명 이상일 때 노출)
+    designer_row = page.locator("text=샵주테스트").first
+    if await designer_row.count() > 0 and await designer_row.is_visible():
+        select_btn = page.locator("button:has-text('선택')").first
+        await expect(select_btn).to_be_visible(timeout=5000)
+        await select_btn.click()
+        await page.wait_for_load_state("networkidle")
+        await page.wait_for_timeout(1000)
+        print("  ✓ 담당자 선택: 샵주테스트")
+
     # 날짜 선택 (내일)
     tomorrow = datetime.now() + timedelta(days=1)
     day_str = str(tomorrow.day)
