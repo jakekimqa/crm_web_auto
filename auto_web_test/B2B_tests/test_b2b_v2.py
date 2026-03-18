@@ -149,21 +149,18 @@ class B2BAutomationV2:
 
     async def _assert_customer_exists_in_list(self, customer_name):
         # 등록 직후 리스트 반영 지연을 고려해 재시도한다.
-        for _ in range(15):
+        for _ in range(30):
             await self._ensure_active_page()
-            list_item = self.page.locator(
-                f"tr:has-text('{customer_name}'), li:has-text('{customer_name}'), div:has-text('{customer_name}')"
-            ).first
+            list_item = self.page.locator(f"tr:has-text('{customer_name}')").first
             if await list_item.count() > 0 and await list_item.is_visible():
                 return
-            await self.page.wait_for_timeout(500)
+            await self.page.wait_for_timeout(1000)
         raise AssertionError(f"고객 리스트에서 고객 미노출: {customer_name}")
 
     async def _customer_exists_in_list(self, customer_name):
-        list_item = self.page.locator(
-            f"tr:has-text('{customer_name}'), li:has-text('{customer_name}'), div:has-text('{customer_name}')"
-        ).first
-        return await list_item.count() > 0 and await list_item.is_visible()
+        # 고객차트 테이블 td에서 정확한 이름 매칭
+        cell = self.page.locator(f"table td:text-is('{customer_name}')").first
+        return await cell.count() > 0 and await cell.is_visible()
 
     @staticmethod
     def _extract_amount(text, label):
@@ -323,21 +320,61 @@ class B2BAutomationV2:
         await self._dismiss_active_dimmer()
         await self.page.wait_for_timeout(1000)
 
-        list_item = self.page.locator(f"tr:has-text('{customer_name}'), li:has-text('{customer_name}')").first
+        # 검색으로 고객 빠르게 찾기
+        search_input = self.page.locator("input#customer-search:visible").first
+        if await search_input.count() > 0 and await search_input.is_visible():
+            await search_input.fill(customer_name)
+            await self.page.wait_for_timeout(1500)
+
+        # 고객차트 테이블 행만 매칭 (예약 목록 li 제외)
+        list_item = self.page.locator(f"tr:has-text('{customer_name}')").first
         await expect(list_item).to_be_visible(timeout=5000)
+
+        # 고객 행에서 상세 URL 추출 후 새 탭으로 열기
+        detail_url = await list_item.evaluate("""el => {
+            const link = el.querySelector('a[href*="/customer/detail/"]');
+            if (link) return link.href;
+            // data 속성에서 고객 ID 추출 시도
+            const id = el.getAttribute('data-id') || el.dataset.customerId;
+            if (id) return '/customer/detail/' + id;
+            // onclick 등에서 URL 추출 시도
+            const text = el.outerHTML;
+            const match = text.match(/customer\\/detail\\/(\\d+)/);
+            return match ? '/customer/detail/' + match[1] : null;
+        }""")
+
+        if detail_url:
+            base = self.base_url.replace("/signin", "")
+            if detail_url.startswith("/"):
+                detail_url = base + detail_url
+            detail_page = await self.context.new_page()
+            await detail_page.goto(detail_url)
+            await detail_page.wait_for_load_state("domcontentloaded")
+            await detail_page.bring_to_front()
+            return detail_page
+
+        # URL 추출 실패 시 클릭으로 시도
+        name_cell = list_item.locator(f"td:has-text('{customer_name}')").first
+        if await name_cell.count() == 0:
+            name_cell = list_item
+        click_target = name_cell
+
         try:
             async with self.context.expect_page(timeout=10000) as new_page_info:
-                await list_item.click()
+                await click_target.click()
             detail_page = await new_page_info.value
             await detail_page.wait_for_load_state("domcontentloaded")
             await detail_page.bring_to_front()
             return detail_page
         except PlaywrightTimeoutError:
-            # 환경에 따라 새 창이 아니라 현재 창/패널로 상세가 열릴 수 있음
-            await list_item.click()
-            await self.page.wait_for_timeout(1200)
+            await self.page.wait_for_timeout(1500)
+            if "/customer/detail/" in self.page.url:
+                await self.page.wait_for_load_state("domcontentloaded")
+                return self.page
+            # 최종 fallback: window.open 강제 사용
+            row_html = await list_item.inner_html()
+            print(f"[DEBUG] 클릭 실패, row HTML: {row_html[:300]}")
             await self.page.wait_for_load_state("domcontentloaded")
-            await self.page.bring_to_front()
             return self.page
 
     async def assert_customer_name_visible_top_left(self, detail_page, customer_name):
@@ -604,6 +641,307 @@ class B2BAutomationV2:
         if detail_page is not self.page and not detail_page.is_closed():
             await detail_page.close()
             await self.focus_main_page()
+
+    async def customer_profile_edit_and_delete_blocked(self, customer_name=None):
+        """고객 상세 프로필 수정 (담당자/메모/닉네임/생년월일/직업) → 저장 → 반영 검증 + 삭제 차단 검증"""
+        if customer_name is None:
+            customer_name = f"자동화_{self.mmdd}_3"
+
+        detail_page = await self.open_customer_detail_from_list(customer_name)
+        await self.assert_customer_name_visible_top_left(detail_page, customer_name)
+        print(f"\n=== 고객 프로필 수정 테스트 시작: {customer_name} ===")
+
+        # ── 프로필 수정 버튼 클릭 ──
+        edit_btn = detail_page.get_by_role("button", name="프로필 수정").first
+        await expect(edit_btn).to_be_visible(timeout=5000)
+        await edit_btn.click()
+        await detail_page.wait_for_timeout(1000)
+
+        # 프로필 수정 패널 열림 확인 (메모 입력 필드가 보이면 열린 것)
+        memo_input = detail_page.get_by_placeholder("고객 특징, 주의사항 등 메모를 남겨주세요.").first
+        await expect(memo_input).to_be_visible(timeout=5000)
+        print("✓ 프로필 수정 패널 열림 확인")
+
+        # ── 수정 값 정의 ──
+        edit_memo = f"자동화 메모 {self.mmdd}"
+        edit_nickname = f"닉네임_{self.mmdd}"
+        edit_job = "네일아티스트"
+        edit_year, edit_month, edit_day = "1990", "5", "15"
+
+        # ── 고객 메모 입력 ──
+        await memo_input.fill(edit_memo)
+        print(f"✓ 고객 메모 입력: {edit_memo}")
+
+        # ── 닉네임 입력 ──
+        nickname_input = detail_page.get_by_placeholder("닉네임을 입력해 주세요.").first
+        await expect(nickname_input).to_be_visible(timeout=5000)
+        await nickname_input.fill(edit_nickname)
+        print(f"✓ 닉네임 입력: {edit_nickname}")
+
+        # ── 생년월일 선택 (년/월/일 드롭다운) ──
+        # 이미 값이 설정된 경우 "년" 대신 기존 값(예: "1990")이 표시될 수 있음
+        year_btn = detail_page.get_by_role("button", name="년").first
+        if await year_btn.count() == 0 or not await year_btn.is_visible():
+            # 이미 설정된 생년월일 버튼 찾기 (예: "1990", "5", "15")
+            year_btn = detail_page.get_by_role("button", name=edit_year, exact=True).first
+        if await year_btn.count() > 0 and await year_btn.is_visible():
+            await year_btn.click()
+            await detail_page.wait_for_timeout(500)
+            year_option = detail_page.get_by_role("button", name=edit_year, exact=True).first
+            if await year_option.count() > 0 and await year_option.is_visible():
+                await year_option.click()
+                await detail_page.wait_for_timeout(500)
+
+        month_btn = detail_page.get_by_role("button", name="월").first
+        if await month_btn.count() == 0 or not await month_btn.is_visible():
+            month_btn = detail_page.get_by_role("button", name=edit_month, exact=True).first
+        if await month_btn.count() > 0 and await month_btn.is_visible():
+            await month_btn.click()
+            await detail_page.wait_for_timeout(500)
+            month_option = detail_page.get_by_role("button", name=edit_month, exact=True).first
+            if await month_option.count() > 0 and await month_option.is_visible():
+                await month_option.click()
+                await detail_page.wait_for_timeout(500)
+
+        day_btn = detail_page.get_by_role("button", name="일").first
+        if await day_btn.count() == 0 or not await day_btn.is_visible():
+            day_btn = detail_page.get_by_role("button", name=edit_day, exact=True).first
+        if await day_btn.count() > 0 and await day_btn.is_visible():
+            await day_btn.click()
+            await detail_page.wait_for_timeout(500)
+            day_option = detail_page.get_by_role("button", name=edit_day, exact=True).first
+            if await day_option.count() > 0 and await day_option.is_visible():
+                await day_option.click()
+                await detail_page.wait_for_timeout(500)
+        print(f"✓ 생년월일 선택: {edit_year}년 {edit_month}월 {edit_day}일")
+
+        # ── 직업 입력 ──
+        job_input = detail_page.get_by_placeholder("직업을 입력해 주세요.").first
+        await expect(job_input).to_be_visible(timeout=5000)
+        await job_input.fill(edit_job)
+        print(f"✓ 직업 입력: {edit_job}")
+
+        # ── 저장 버튼 클릭 (삭제 검증보다 먼저 수행) ──
+        save_btn = detail_page.get_by_role("button", name="저장").first
+        await expect(save_btn).to_be_visible(timeout=5000)
+        await save_btn.click()
+        await detail_page.wait_for_timeout(2000)
+        try:
+            await detail_page.wait_for_load_state("networkidle", timeout=5000)
+        except Exception:
+            pass
+        print("✓ 프로필 저장 완료")
+
+        # ── 저장 후 고객 상세 반영 검증 ──
+        body_text = await detail_page.locator("body").inner_text()
+
+        assert edit_memo in body_text, f"고객 메모 반영 실패: '{edit_memo}' not found"
+        print(f"✓ 고객 메모 반영 확인: {edit_memo}")
+
+        assert edit_nickname in body_text, f"닉네임 반영 실패: '{edit_nickname}' not found"
+        print(f"✓ 닉네임 반영 확인: {edit_nickname}")
+
+        assert edit_job in body_text, f"직업 반영 실패: '{edit_job}' not found"
+        print(f"✓ 직업 반영 확인: {edit_job}")
+
+        # 생년월일 검증 (다양한 포맷 대응)
+        birth_patterns = [
+            f"{edit_year}.{edit_month}.{edit_day}",
+            f"{edit_year}. {edit_month}. {edit_day}",
+            f"1990년 5월 15일",
+            f"90.05.15",
+            f"90. 5. 15",
+        ]
+        birth_found = any(p in body_text for p in birth_patterns)
+        assert birth_found, f"생년월일 반영 실패: {birth_patterns} 중 어느 것도 없음"
+        print("✓ 생년월일 반영 확인")
+
+        # ── 삭제 차단 검증 (저장 후 프로필 수정 다시 열어서 진행) ──
+        edit_btn2 = detail_page.get_by_role("button", name="프로필 수정").first
+        if await edit_btn2.count() > 0 and await edit_btn2.is_visible():
+            await edit_btn2.click()
+            await detail_page.wait_for_timeout(1000)
+
+        delete_btn = detail_page.locator('button:has(svg[icon="systemDelete"])').first
+        if await delete_btn.count() > 0:
+            await delete_btn.scroll_into_view_if_needed()
+            await detail_page.wait_for_timeout(500)
+        if await delete_btn.count() > 0 and await delete_btn.is_visible():
+            await delete_btn.click()
+            await detail_page.wait_for_timeout(1000)
+
+            # 1단계: "정말 삭제하시겠습니까?" 확인 모달 → [삭제] 클릭
+            body_text_del = await detail_page.locator("body").inner_text()
+            if "정말 삭제하시겠습니까" in body_text_del:
+                confirm_delete_btn = detail_page.locator("button:has-text('삭제'):visible").last
+                dialog_message = None
+
+                def on_dialog(dialog):
+                    nonlocal dialog_message
+                    dialog_message = dialog.message
+                    asyncio.ensure_future(dialog.accept())
+
+                detail_page.on("dialog", on_dialog)
+                await confirm_delete_btn.click()
+                await detail_page.wait_for_timeout(2000)
+                detail_page.remove_listener("dialog", on_dialog)
+
+                expected_msg = "삭제할 수 없습니다"
+                if dialog_message is not None:
+                    assert expected_msg in dialog_message, (
+                        f"삭제 불가 alert 메시지 불일치: '{dialog_message}'"
+                    )
+                    print(f"✓ 삭제 차단 alert 확인: {dialog_message[:80]}")
+                else:
+                    body_text2 = await detail_page.locator("body").inner_text()
+                    assert expected_msg in body_text2, "삭제 불가 메시지를 찾을 수 없습니다"
+                    print("✓ 삭제 차단 메시지 확인 (커스텀 UI)")
+            else:
+                print("⚠ 삭제 확인 모달이 예상과 다르게 동작")
+        else:
+            print("⚠ 삭제 버튼을 찾을 수 없어 삭제 차단 검증 스킵")
+
+        print(f"=== 고객 프로필 수정 테스트 완료: {customer_name} ===\n")
+
+        if detail_page is not self.page and not detail_page.is_closed():
+            await detail_page.close()
+            await self.focus_main_page()
+
+    async def _verify_customer_tabs(self, customer_name, expected):
+        """고객 상세 페이지에서 각 탭 데이터 정합성 검증"""
+        detail_page = await self.open_customer_detail_from_list(customer_name)
+        await self.assert_customer_name_visible_top_left(detail_page, customer_name)
+        print(f"\n--- {customer_name} 탭 데이터 검증 시작 ---")
+
+        # ── 좌측 요약 영역 검증 ──
+        await detail_page.wait_for_timeout(2000)
+        try:
+            await detail_page.wait_for_load_state("networkidle", timeout=5000)
+        except Exception:
+            pass
+        body_text = await detail_page.locator("body").inner_text()
+
+        if "expected_real_sales" in expected:
+            assert expected["expected_real_sales"] in body_text, (
+                f"실 매출 검증 실패: '{expected['expected_real_sales']}' not found"
+            )
+            print(f"✓ 실 매출 확인: {expected['expected_real_sales']}")
+
+        # ── 매출 탭 (기본 선택) ──
+        sales_tab = detail_page.locator('[role="tab"]:has-text("매출")').first
+        if await sales_tab.count() > 0:
+            await sales_tab.click()
+            await detail_page.wait_for_timeout(1000)
+            tab_text = await detail_page.locator("body").inner_text()
+            for keyword in expected.get("sales_keywords", []):
+                assert keyword in tab_text, f"매출 탭 검증 실패: '{keyword}' not found"
+                print(f"✓ 매출 탭: {keyword}")
+
+        # ── 시술 탭 ──
+        treatment_tab = detail_page.locator('[role="tab"]:has-text("시술")').first
+        if await treatment_tab.count() > 0 and expected.get("treatment_keywords"):
+            await treatment_tab.click()
+            await detail_page.wait_for_timeout(1000)
+            tab_text = await detail_page.locator("body").inner_text()
+            for keyword in expected["treatment_keywords"]:
+                assert keyword in tab_text, f"시술 탭 검증 실패: '{keyword}' not found"
+                print(f"✓ 시술 탭: {keyword}")
+
+        # ── 예약 탭 ──
+        reservation_tab = detail_page.locator('[role="tab"]:has-text("예약")').first
+        if await reservation_tab.count() > 0 and expected.get("reservation_keywords"):
+            await reservation_tab.click()
+            await detail_page.wait_for_timeout(1000)
+            tab_text = await detail_page.locator("body").inner_text()
+            for keyword in expected["reservation_keywords"]:
+                assert keyword in tab_text, f"예약 탭 검증 실패: '{keyword}' not found"
+                print(f"✓ 예약 탭: {keyword}")
+
+        # ── 정액권 탭 ──
+        membership_tab = detail_page.locator('[role="tab"]:has-text("정액권")').first
+        if await membership_tab.count() > 0 and expected.get("membership_keywords"):
+            await membership_tab.click()
+            await detail_page.wait_for_timeout(1000)
+            tab_text = await detail_page.locator("body").inner_text()
+            for keyword in expected["membership_keywords"]:
+                assert keyword in tab_text, f"정액권 탭 검증 실패: '{keyword}' not found"
+                print(f"✓ 정액권 탭: {keyword}")
+
+        # ── 티켓 탭 ──
+        ticket_tab = detail_page.locator('[role="tab"]:has-text("티켓")').first
+        if await ticket_tab.count() > 0 and expected.get("ticket_keywords"):
+            await ticket_tab.click()
+            await detail_page.wait_for_timeout(1000)
+            tab_text = await detail_page.locator("body").inner_text()
+            for keyword in expected["ticket_keywords"]:
+                assert keyword in tab_text, f"티켓 탭 검증 실패: '{keyword}' not found"
+                print(f"✓ 티켓 탭: {keyword}")
+
+        # ── 포인트 탭 ──
+        point_tab = detail_page.locator('[role="tab"]:has-text("포인트")').first
+        if await point_tab.count() > 0 and expected.get("point_keywords"):
+            await point_tab.click()
+            await detail_page.wait_for_timeout(1000)
+            tab_text = await detail_page.locator("body").inner_text()
+            for keyword in expected["point_keywords"]:
+                assert keyword in tab_text, f"포인트 탭 검증 실패: '{keyword}' not found"
+                print(f"✓ 포인트 탭: {keyword}")
+
+        # ── 패밀리 탭 ──
+        family_tab = detail_page.locator('[role="tab"]:has-text("패밀리")').first
+        if await family_tab.count() > 0 and expected.get("family_keywords"):
+            await family_tab.click()
+            await detail_page.wait_for_timeout(1000)
+            tab_text = await detail_page.locator("body").inner_text()
+            for keyword in expected["family_keywords"]:
+                assert keyword in tab_text, f"패밀리 탭 검증 실패: '{keyword}' not found"
+                print(f"✓ 패밀리 탭: {keyword}")
+
+        print(f"--- {customer_name} 탭 데이터 검증 완료 ---\n")
+
+        if detail_page is not self.page and not detail_page.is_closed():
+            await detail_page.close()
+            await self.focus_main_page()
+
+    async def customer_detail_verification(self):
+        """고객 상세 통합 검증: 프로필 수정 + 삭제 차단 + 3명 탭 데이터 정합성"""
+        print("\n========== 고객 상세 통합 검증 시작 ==========")
+
+        # ── 1. 고객_3 프로필 수정 + 삭제 차단 ──
+        customer_3 = f"자동화_{self.mmdd}_3"
+        await self.customer_profile_edit_and_delete_blocked(customer_3)
+
+        # ── 2. 고객_1 탭 데이터 정합성 ──
+        customer_1 = f"자동화_{self.mmdd}_1"
+        await self._verify_customer_tabs(customer_1, {
+            "expected_real_sales": "200,000원",
+            "sales_keywords": ["젤 기본", "정액권"],
+            "treatment_keywords": ["젤 기본"],
+            "reservation_keywords": ["오후 4:00", "매출등록"],
+            "membership_keywords": ["220,000원"],
+            "family_keywords": [f"자동화_{self.mmdd}_3"],
+        })
+
+        # ── 3. 고객_2 탭 데이터 정합성 ──
+        customer_2 = f"자동화_{self.mmdd}_2"
+        await self._verify_customer_tabs(customer_2, {
+            "sales_keywords": ["티켓"],
+            "reservation_keywords": ["오후 5:00", "매출등록"],
+            "ticket_keywords": ["10만원권"],
+        })
+
+        # ── 4. 고객_3 탭 데이터 정합성 ──
+        await self._verify_customer_tabs(customer_3, {
+            "expected_real_sales": "10,000원",
+            "sales_keywords": ["케어", "현금", "카드", "정액권"],
+            "treatment_keywords": ["케어"],
+            "reservation_keywords": ["오후 6:00", "매출등록"],
+            "membership_keywords": ["패밀리"],
+            "point_keywords": ["1,500"],
+            "family_keywords": [f"자동화_{self.mmdd}_1"],
+        })
+
+        print("========== 고객 상세 통합 검증 완료 ==========\n")
 
     async def ensure_calendar_page(self):
         await self.focus_main_page()

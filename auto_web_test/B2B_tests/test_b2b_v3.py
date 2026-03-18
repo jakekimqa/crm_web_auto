@@ -91,3 +91,7 @@ async def test_verify_shop_status_today_summary(runner):
 
 async def test_verify_statistics_details(runner):
     await runner.verify_shop_status_and_statistics()
+
+
+async def test_customer_detail_verification(runner):
+    await runner.customer_detail_verification()

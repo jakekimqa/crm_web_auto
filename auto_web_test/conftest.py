@@ -128,6 +128,9 @@ ACTIVE_SESSION = None
 
 def _post_to_slack(text: str):
     """메시지 전송 후 thread_ts 반환 (Slack API 사용 시)"""
+    if os.getenv("NO_SLACK"):
+        print("[SLACK] NO_SLACK 설정됨 - skip")
+        return None
     if not WEBHOOK and not SLACK_BOT_TOKEN:
         print("[SLACK] webhook/token MISSING - skip")
         return None
@@ -282,13 +285,18 @@ def pytest_sessionfinish(session, exitstatus):
     print(f"[SLACK] counts={stats}, total={total}, duration={duration:.2f}s")
     print(f"[SLACK] has_v2={has_v2}")
 
-    # v2 또는 v3 파일이 포함된 실행이면 성공/실패 모두 전송
     has_v3 = any("test_b2b_v3.py" in nid for nid in nodeids)
+    has_b2c_cancel = any("test_b2c_cancel_booking.py" in nid for nid in nodeids)
+    has_b2c_kok = any("test_b2c_kok_booking.py" in nid for nid in nodeids)
     target_files = []
     if has_v2:
         target_files.append("test_b2b_v2.py")
     if has_v3:
         target_files.append("test_b2b_v3.py")
+    if has_b2c_cancel:
+        target_files.append("test_b2c_cancel_booking.py")
+    if has_b2c_kok:
+        target_files.append("test_b2c_kok_booking.py")
 
     if target_files:
         ok = (exitstatus == 0)
@@ -313,6 +321,7 @@ def pytest_sessionfinish(session, exitstatus):
         case_block = "\n".join(case_lines) if case_lines else "- (케이스 결과 없음)"
 
         flow_lines = []
+        # v2 flow
         if case_map.get("test_full_e2e_from_start_v2") == "PASS":
             flow_lines.extend([
                 "- 고객 3명 생성 + 중복 연락처 모달 검증 완료",
@@ -320,21 +329,53 @@ def pytest_sessionfinish(session, exitstatus):
             ])
         if case_map.get("test_sales_registrations_1_to_4_v2") == "PASS":
             flow_lines.append("- 매출등록 1~4 완료 (매출 등록 4 완료)")
-        # v3 flow
-        if case_map.get("test_login_and_add_customers") == "PASS":
-            flow_lines.append("- 고객 3명 등록 완료")
-        if case_map.get("test_membership_charge_from_customer_detail") == "PASS":
-            flow_lines.append("- 정액권 충전 완료")
-        if case_map.get("test_family_share") == "PASS":
-            flow_lines.append("- 패밀리 추가 완료")
-        if case_map.get("test_ticket_charge_from_customer_detail") == "PASS":
-            flow_lines.append("- 티켓 충전 완료")
-        if case_map.get("test_make_reservations") == "PASS":
-            flow_lines.append("- 예약 등록 완료")
-        if case_map.get("test_sales_registrations_1_to_5") == "PASS":
-            flow_lines.append("- 매출등록 1~5 완료 (패밀리 공유 정액권 포함)")
-        elif case_map.get("test_sales_registrations_1_to_4") == "PASS":
-            flow_lines.append("- 매출등록 1~4 완료")
+        # v3 flow (Phase별 상세)
+        v3_cases = [
+            ("test_login_and_add_customers", "고객 3명 등록"),
+            ("test_membership_charge_from_customer_detail", "정액권 충전"),
+            ("test_family_share", "패밀리 추가"),
+            ("test_customer_detail_verification", "고객 상세 검증"),
+            ("test_ticket_charge_from_customer_detail", "티켓 충전"),
+            ("test_make_reservations", "예약 등록"),
+        ]
+        v3_any = any(case_map.get(c) for c, _ in v3_cases)
+        if v3_any:
+            flow_lines.append("")
+            flow_lines.append("*[B2B] test_b2b_v3.py*")
+            for case_name, label in v3_cases:
+                st = case_map.get(case_name)
+                if st == "PASS":
+                    flow_lines.append(f"  {label} ✅")
+                elif st in ("FAIL", "ERROR"):
+                    flow_lines.append(f"  {label} ❌")
+                elif st == "SKIP":
+                    flow_lines.append(f"  {label} ⏭️")
+            # 매출등록 (별도 처리)
+            if case_map.get("test_sales_registrations_1_to_5") == "PASS":
+                flow_lines.append("  매출등록 1~5 (패밀리 공유 정액권 포함) ✅")
+            elif case_map.get("test_sales_registrations_1_to_5") in ("FAIL", "ERROR"):
+                flow_lines.append("  매출등록 1~5 ❌")
+            elif case_map.get("test_sales_registrations_1_to_4") == "PASS":
+                flow_lines.append("  매출등록 1~4 ✅")
+            elif case_map.get("test_sales_registrations_1_to_4") in ("FAIL", "ERROR"):
+                flow_lines.append("  매출등록 1~4 ❌")
+        # B2C flow (Phase별 상세)
+        if case_map.get("test_b2c_booking_cancel_with_default_reason") == "PASS":
+            flow_lines.append("")
+            flow_lines.append("*[B2C] test_b2c_cancel_booking.py*")
+            flow_lines.append("  Phase 1: 샵 생성 + 공비서 입점 ✅")
+            flow_lines.append("  Phase 1.5: 직원 입사 신청 + 원장 승인 ✅")
+            flow_lines.append("  Phase 2: B2C 예약 3건 (샵주+남성컷+직원) ✅")
+            flow_lines.append("  Phase 3: CRM 캘린더 → 예약 취소 ✅")
+            flow_lines.append("  Phase 4: 취소 사유 검증 ✅")
+            flow_lines.append("  Phase 4.5: 두 번째 예약 매출 등록 ✅")
+            flow_lines.append("  Phase 5: 공비서 예약 OFF → B2C 미노출 ✅")
+            flow_lines.append("  Phase 6: 콕예약 (자동화_헤렌네일) ✅")
+            flow_lines.append("  Phase 7: 콕예약 CRM 매출 등록 ✅")
+        if case_map.get("test_b2c_kok_booking") == "PASS":
+            flow_lines.append("")
+            flow_lines.append("*[B2C] test_b2c_kok_booking.py*")
+            flow_lines.append("  콕예약 + CRM 매출등록 ✅")
         flow_block = "\n".join(flow_lines)
 
         pass_count = sum(1 for s in case_map.values() if s == "PASS")

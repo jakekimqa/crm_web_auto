@@ -1,5 +1,5 @@
 """
-B2C 예약 2건 → B2B 첫 번째 취소 + 사유 검증 → 두 번째 매출 등록 → 공비서 예약 OFF → B2C 미노출
+B2C 예약 3건 → B2B 취소 + 사유 검증 → 매출 등록 → 공비서 예약 OFF → 콕예약 + 매출 등록
 """
 import os, re, sys, json, urllib.request
 from datetime import datetime, timedelta
@@ -13,7 +13,7 @@ from auto_web_test.B2C_tests.test_b2b_b2c_shop_activation_flow import (
     ShopActivationRunner, _crm_login, _switch_shop,
     _open_nearby_list, _is_shop_visible_in_nearby,
     _make_reservation, _kakao_login, _is_toggle_on, _set_toggle,
-    CRM_BASE_URL, SHOT_DIR,
+    CRM_BASE_URL, ZERO_BASE_URL, SHOT_DIR,
 )
 
 
@@ -625,6 +625,231 @@ async def test_b2c_booking_cancel_with_default_reason():
             f"비활성화 후 '{shop_name}' 아직 노출"
         print("  ✓ B2C 미노출 확인")
         print("✓ Phase 5 완료\n")
+
+        # ── Phase 6: 콕예약 (기존 샵: 자동화_헤렌네일) ──
+        print("=== Phase 6: 콕예약 (자동화_헤렌네일) ===")
+        KOK_SHOP_NAME = "자동화_헤렌네일"
+
+        # 기존 zero_page 세션 재활용 → 홈으로 이동
+        await zero_page.bring_to_front()
+        await zero_page.goto(f"{ZERO_BASE_URL}/main")
+        await zero_page.wait_for_load_state("networkidle")
+        await zero_page.wait_for_timeout(2000)
+
+        # 관심샵에서 자동화_헤렌네일 진입
+        fav_shop = zero_page.locator(f"text={KOK_SHOP_NAME}").first
+        await expect(fav_shop).to_be_visible(timeout=10000)
+        await fav_shop.click()
+        await zero_page.wait_for_load_state("networkidle")
+        await zero_page.wait_for_timeout(1500)
+        print(f"  ✓ 관심샵 '{KOK_SHOP_NAME}' 진입")
+
+        # 콕예약 탭 선택
+        kok_tab = zero_page.locator("button:has-text('콕예약')").first
+        await expect(kok_tab).to_be_visible(timeout=10000)
+        await kok_tab.click()
+        await zero_page.wait_for_timeout(1000)
+        print("  ✓ 콕예약 탭 선택")
+
+        # 자동화_테스트 콕예약 선택
+        kok_item = zero_page.locator("text=자동화_테스트").first
+        await expect(kok_item).to_be_visible(timeout=10000)
+        await kok_item.click()
+        await zero_page.wait_for_load_state("networkidle")
+        await zero_page.wait_for_timeout(1000)
+        print("  ✓ '자동화_테스트' 콕예약 선택")
+
+        # 내일 날짜 선택
+        tomorrow_kok = datetime.now() + timedelta(days=1)
+        day_str_kok = str(tomorrow_kok.day)
+        date_btn_kok = zero_page.get_by_role("button", name=day_str_kok, exact=True).first
+        await expect(date_btn_kok).to_be_visible(timeout=10000)
+        await date_btn_kok.click()
+        await zero_page.wait_for_timeout(1000)
+        print(f"  ✓ 날짜 선택: 내일 ({tomorrow_kok.month}/{tomorrow_kok.day})")
+
+        # 담당자 선택: 샵주테스트
+        designer_kok = zero_page.locator("text=샵주테스트").first
+        if await designer_kok.count() > 0 and await designer_kok.is_visible():
+            select_btn_kok = zero_page.locator("button:has-text('선택')").first
+            if await select_btn_kok.count() > 0 and await select_btn_kok.is_visible():
+                await select_btn_kok.click()
+            else:
+                await designer_kok.click()
+            await zero_page.wait_for_load_state("networkidle")
+            await zero_page.wait_for_timeout(1000)
+            print("  ✓ 담당자 선택: 샵주테스트")
+
+        # 가장 빠른 시간 선택
+        time_btn_kok = zero_page.locator("button:has-text(':00'), button:has-text(':30')").first
+        await expect(time_btn_kok).to_be_visible(timeout=10000)
+        kok_time = await time_btn_kok.inner_text()
+        await time_btn_kok.click()
+        await zero_page.wait_for_timeout(500)
+        print(f"  ✓ 시간 선택: {kok_time}")
+
+        # 예약하기 → 결제 페이지
+        booking_btn_kok = zero_page.locator("button:has-text('예약하기')").last
+        await expect(booking_btn_kok).to_be_visible(timeout=10000)
+        await booking_btn_kok.click()
+        await zero_page.wait_for_load_state("networkidle")
+        await zero_page.wait_for_timeout(2000)
+
+        # 고객 요청사항 확인
+        request_textarea = zero_page.locator("textarea").first
+        if await request_textarea.count() > 0:
+            request_text = await request_textarea.input_value()
+        else:
+            request_text = await zero_page.locator("body").inner_text()
+        assert "[콕예약]" in request_text, \
+            f"고객 요청사항에 '[콕예약]' 미포함: '{request_text[:100]}'"
+        print(f"  ✓ 고객 요청사항: '{request_text.strip()}'")
+
+        # 동의 체크 (있으면)
+        agree_kok = zero_page.locator("label:has-text('위 내용을 확인하였으며'), input[type='checkbox']").first
+        if await agree_kok.count() > 0:
+            await agree_kok.click()
+            await zero_page.wait_for_timeout(500)
+
+        # 하단 [예약하기] → 예약 완료
+        final_kok = zero_page.locator("button:has-text('예약하기')").last
+        await expect(final_kok).to_be_visible(timeout=10000)
+        await final_kok.click()
+        await zero_page.wait_for_load_state("networkidle")
+        await zero_page.wait_for_timeout(2000)
+
+        assert "bookingId" in zero_page.url or "예약 완료" in await zero_page.locator("body").inner_text(), \
+            f"콕예약 실패: {zero_page.url}"
+        await zero_page.screenshot(path=str(SHOT_DIR / "kok_01_booking_complete.png"))
+        print("  ✓ 콕예약 완료!")
+        print("✓ Phase 6 완료\n")
+
+        # ── Phase 7: 콕예약 CRM 매출 등록 ──
+        print("=== Phase 7: 콕예약 CRM 매출 등록 ===")
+        await crm_page.bring_to_front()
+        await _switch_shop(crm_page, KOK_SHOP_NAME)
+        print(f"  ✓ CRM '{KOK_SHOP_NAME}' 전환")
+
+        # 캘린더 → 내일 이동
+        await crm_page.goto(f"{CRM_BASE_URL}/book/calendar")
+        await crm_page.wait_for_load_state("networkidle")
+        await crm_page.wait_for_timeout(2000)
+
+        # 딤머 닫기
+        for _ in range(5):
+            dim = crm_page.locator("#modal-dimmer.isActiveDimmed:visible").first
+            if await dim.count() > 0:
+                await dim.click(force=True)
+                await crm_page.wait_for_timeout(500)
+            else:
+                break
+
+        # "일" 보기
+        for name in ["일", "날짜별"]:
+            btn = crm_page.get_by_role("button", name=name).first
+            if await btn.count() > 0 and await btn.is_visible():
+                await btn.click()
+                await crm_page.wait_for_load_state("networkidle")
+                await crm_page.wait_for_timeout(1500)
+                break
+
+        # 딤머 닫기
+        for _ in range(3):
+            dim = crm_page.locator("#modal-dimmer.isActiveDimmed:visible").first
+            if await dim.count() > 0:
+                await dim.click(force=True)
+                await crm_page.wait_for_timeout(500)
+            else:
+                break
+
+        # 내일로 이동
+        d_kok = tomorrow_kok
+        header_kok = await crm_page.locator("h2.fc-toolbar-title, .fc-toolbar-title").first.text_content()
+        for _ in range(10):
+            if f"{d_kok.day}" in header_kok:
+                break
+            current_match = re.search(r"(\d+)\.\s*(\d+)", header_kok)
+            if current_match:
+                current_day_kok = int(current_match.group(2))
+                btn_cls_kok = "fc-next-button" if current_day_kok < d_kok.day else "fc-prev-button"
+            else:
+                btn_cls_kok = "fc-next-button"
+            nav_btn_kok = crm_page.locator(f"button.{btn_cls_kok}").first
+            await expect(nav_btn_kok).to_be_visible(timeout=5000)
+            await nav_btn_kok.click()
+            await crm_page.wait_for_load_state("networkidle")
+            await crm_page.wait_for_timeout(1500)
+            header_kok = await crm_page.locator("h2.fc-toolbar-title, .fc-toolbar-title").first.text_content()
+        print(f"  ✓ 캘린더 날짜: {header_kok.strip()}")
+
+        # 딤머 닫기
+        for _ in range(3):
+            dim = crm_page.locator("#modal-dimmer.isActiveDimmed:visible").first
+            if await dim.count() > 0:
+                await dim.click(force=True)
+                await crm_page.wait_for_timeout(500)
+            else:
+                break
+
+        # 예약 블록 클릭 → 상세
+        kok_block = crm_page.locator("div.booking-normal").first
+        await expect(kok_block).to_be_visible(timeout=15000)
+        await kok_block.click(force=True)
+        await crm_page.wait_for_timeout(3000)
+        await crm_page.wait_for_load_state("networkidle")
+        kok_detail_url = crm_page.url
+        print(f"  ✓ 예약 상세: {kok_detail_url}")
+
+        # "공비서 > 콕예약" 확인
+        kok_detail_text = await crm_page.locator("body").inner_text()
+        assert "공비서" in kok_detail_text, "'공비서' 텍스트 미발견"
+        assert "콕예약" in kok_detail_text, "'콕예약' 텍스트 미발견"
+        print("  ✓ '공비서 > 콕예약' 확인")
+        if "[콕예약]" in kok_detail_text:
+            print("  ✓ 요청사항에 [콕예약] 확인")
+        await crm_page.screenshot(path=str(SHOT_DIR / "kok_02_crm_detail.png"))
+
+        # 매출 등록
+        sales_btn_kok = crm_page.locator("h4:has-text('매출 등록'), button:has-text('매출 등록')").first
+        await expect(sales_btn_kok).to_be_visible(timeout=10000)
+        await sales_btn_kok.click()
+        await crm_page.wait_for_load_state("networkidle")
+        await crm_page.wait_for_timeout(2000)
+        print(f"  ✓ 매출 등록 페이지: {crm_page.url}")
+
+        # 결제 금액 확인
+        kok_sales_text = await crm_page.locator("body").inner_text()
+        if "20,000" in kok_sales_text:
+            print("  ✓ 결제 금액: 20,000원")
+
+        # 카드 선택
+        card_btn_kok = crm_page.get_by_text("카드", exact=True).first
+        if await card_btn_kok.count() == 0:
+            card_btn_kok = crm_page.locator("button:has-text('카드'), label:has-text('카드')").first
+        await expect(card_btn_kok).to_be_visible(timeout=10000)
+        await card_btn_kok.click()
+        await crm_page.wait_for_timeout(500)
+        print("  ✓ 결제 수단: 카드 선택")
+
+        # 매출 저장
+        save_btn_kok = crm_page.locator("button:has-text('매출 저장')").first
+        await expect(save_btn_kok).to_be_visible(timeout=10000)
+        await save_btn_kok.click()
+        await crm_page.wait_for_load_state("networkidle")
+        await crm_page.wait_for_timeout(3000)
+        print("  ✓ 매출 저장 완료")
+
+        # 매출 등록 완료 확인
+        await crm_page.goto(kok_detail_url)
+        await crm_page.wait_for_load_state("networkidle")
+        await crm_page.wait_for_timeout(2000)
+        kok_sales_label = crm_page.locator("h4.SALE.disabled:has-text('매출 등록')").first
+        if await kok_sales_label.count() == 0:
+            kok_sales_label = crm_page.locator("h4:has-text('매출 등록')").first
+        await expect(kok_sales_label).to_be_visible(timeout=10000)
+        print("  ✓ 매출 등록 완료 상태 확인")
+        await crm_page.screenshot(path=str(SHOT_DIR / "kok_03_sales_done.png"))
+        print("✓ Phase 7 완료\n")
 
         print("=== 전체 테스트 성공! ===")
 

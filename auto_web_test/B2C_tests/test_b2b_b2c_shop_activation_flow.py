@@ -200,10 +200,20 @@ class ShopActivationRunner(B2BAutomationV2):
         await expect(deposit_section).to_be_visible(timeout=10000)
         await deposit_section.scroll_into_view_if_needed()
 
+        # dimmer가 가로막을 수 있으므로 먼저 닫기
+        for _ in range(5):
+            dim = self.page.locator("#modal-dimmer.isActiveDimmed:visible").first
+            if await dim.count() > 0:
+                await dim.click(force=True)
+                await self.page.wait_for_timeout(500)
+            else:
+                break
+
         without_deposit = self.page.locator("h4:has-text('예약금 없이 예약'):visible").first
         await expect(without_deposit).to_be_visible(timeout=10000)
         await without_deposit.scroll_into_view_if_needed()
-        await without_deposit.click()
+        await self.page.wait_for_timeout(500)
+        await without_deposit.click(force=True)
         await self.page.wait_for_timeout(1000)
 
         reservation_mode_text = re.sub(r"\s+", " ", await self.page.locator("body").inner_text())
