@@ -93,5 +93,21 @@ async def test_verify_statistics_details(runner):
     await runner.verify_shop_status_and_statistics()
 
 
+async def test_custom_payment_method(runner):
+    await runner.custom_payment_method()
+
+
 async def test_customer_detail_verification(runner):
     await runner.customer_detail_verification()
+
+
+async def test_block_reservation(runner):
+    # 등록
+    await runner.block_reservation()
+    await runner.block_reservation_repeat()
+    # 검증
+    await runner.verify_block_reservation()
+    await runner.verify_block_reservation_repeat()
+    # 삭제
+    await runner.delete_block_reservation()
+    await runner.delete_block_reservation_repeat()

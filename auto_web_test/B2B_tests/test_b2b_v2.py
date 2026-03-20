@@ -1649,6 +1649,475 @@ class B2BAutomationV2:
         assert payment_total == 370000, f"결제수단 통계 총 합계 불일치: {payment_total}"
         print("✓ 결제 수단별 통계 검증 완료: 실매출 320,000 / 차감 50,000 / 총합계 370,000")
 
+    async def custom_payment_method(self, customer_name=None):
+        """커스텀 결제수단 추가 → 매출 등록 → 통계 검증 → 매출 삭제 → 결제수단 삭제"""
+        print("\n=== 커스텀 결제수단 테스트 시작 ===")
+        customer = customer_name or f"자동화_{self.mmdd}_1"
+        payment_name = "페이 추가 테스트"
+
+        # ── 1. 매출 페이지 → 신규 매출 등록 ──
+        await self.focus_main_page()
+        await self.page.locator("h3:has-text('매출')").first.click()
+        await self.page.wait_for_timeout(500)
+        sales_link = self.page.locator("text=매출 현황").first
+        if await sales_link.count() > 0:
+            await sales_link.click()
+            await self.page.wait_for_load_state("networkidle")
+            await self.page.wait_for_timeout(1000)
+
+        new_item = self.page.locator(".new-item").first
+        await expect(new_item).to_be_visible(timeout=5000)
+        await new_item.click()
+        await self.page.wait_for_load_state("networkidle")
+        await self.page.wait_for_timeout(1500)
+        print("  ✓ 신규 매출 등록 페이지 진입")
+
+        # ── 2. 고객 검색 ──
+        field = self.page.locator("input#customer-search:visible").first
+        await expect(field).to_be_visible(timeout=5000)
+        await field.fill(customer)
+        await field.press("Enter")
+        await self.page.wait_for_timeout(1500)
+
+        # 검색 결과에서 고객 선택
+        result = self.page.locator("li").filter(has_text=customer).first
+        await expect(result).to_be_visible(timeout=5000)
+        await result.click()
+        await self.page.wait_for_timeout(1000)
+        print(f"  ✓ 고객 선택: {customer}")
+
+        # ── 3. 시술 메뉴 선택: 손 > 젤 기본 ──
+        await self.page.locator("#sale-item-group button.select-display:visible").first.click()
+        await self.page.locator("button:has-text('손')").locator(":visible").first.click()
+        await self.page.wait_for_timeout(500)
+        await self.page.locator("button:has-text('젤 기본')").locator(":visible").first.click()
+        await self.page.wait_for_timeout(500)
+        print("  ✓ 시술 메뉴: 손 > 젤 기본")
+
+        # ── 4. 결제 수단 설정 → 커스텀 결제수단 추가 ──
+        settings_btn = self.page.locator("button:has-text('결제 수단 설정'):visible").first
+        await expect(settings_btn).to_be_visible(timeout=5000)
+        await settings_btn.click()
+        await self.page.wait_for_timeout(1000)
+
+        add_btn = self.page.locator("button:has-text('결제 수단 추가')").first
+        await expect(add_btn).to_be_visible(timeout=5000)
+        await add_btn.click()
+        await self.page.wait_for_timeout(500)
+
+        # 결제수단 이름 입력
+        await self.page.wait_for_timeout(1000)
+        name_input = self.page.locator("input[placeholder*='결제 수단 이름']").first
+        await expect(name_input).to_be_visible(timeout=5000)
+        await name_input.click()
+        await name_input.type(payment_name, delay=30)
+        print(f"  ✓ 결제수단 이름: {payment_name}")
+
+        # 토글 ON
+        toggle = self.page.locator("label[for='isActiveSelectedPaymentMethod']").last
+        await expect(toggle).to_be_visible(timeout=3000)
+        await toggle.click()
+        await self.page.wait_for_timeout(500)
+
+        # 저장 → alert 처리 ("저장되었습니다." 또는 "이미 사용 중인 이름입니다.")
+        async with self.page.expect_event("dialog", timeout=5000) as dlg_info:
+            await self.page.locator("button:has-text('저장'):visible").last.click()
+        dialog = await dlg_info.value
+        print(f"  저장 alert: {dialog.message}")
+        await dialog.accept()
+        await self.page.wait_for_timeout(1000)
+
+        already_exists = "이미 사용" in dialog.message
+        if already_exists:
+            print("  ⚠ 이미 존재하는 결제수단 — 생성 건너뜀")
+        else:
+            print("  ✓ 결제수단 추가 완료")
+
+        # 결제 수단 설정 모달 닫기 — 페이지 리로드로 확실하게 초기화
+        base = self.base_url.replace("/signin", "")
+        await self.page.goto(f"{base}/sale")
+        await self.page.wait_for_load_state("networkidle")
+        await self.page.wait_for_timeout(1000)
+
+        # 신규 매출 등록 재진입
+        new_item = self.page.locator(".new-item").first
+        await expect(new_item).to_be_visible(timeout=5000)
+        await new_item.click()
+        await self.page.wait_for_load_state("networkidle")
+        await self.page.wait_for_timeout(1500)
+
+        # 고객 재선택
+        field = self.page.locator("input#customer-search:visible").first
+        await expect(field).to_be_visible(timeout=5000)
+        await field.fill(customer)
+        await field.press("Enter")
+        await self.page.wait_for_timeout(1500)
+        result = self.page.locator("li").filter(has_text=customer).first
+        await expect(result).to_be_visible(timeout=5000)
+        await result.click()
+        await self.page.wait_for_timeout(1000)
+
+        # 시술 메뉴 재선택
+        await self.page.locator("#sale-item-group button.select-display:visible").first.click()
+        await self.page.locator("button:has-text('손')").locator(":visible").first.click()
+        await self.page.wait_for_timeout(500)
+        await self.page.locator("button:has-text('젤 기본')").locator(":visible").first.click()
+        await self.page.wait_for_timeout(500)
+
+        # ── 5. 커스텀 결제수단으로 매출 등록 ──
+        payment_label = self.page.locator(f"label:has(h4:has-text('{payment_name}')):visible").first
+        if await payment_label.count() == 0:
+            payment_label = self.page.get_by_text(payment_name, exact=True).first
+        await expect(payment_label).to_be_visible(timeout=5000)
+        await payment_label.click()
+        await self.page.wait_for_timeout(500)
+        print(f"  ✓ 결제수단 선택: {payment_name}")
+
+        await self.page.locator("button:has-text('매출 저장'):visible").last.click()
+        await self.page.wait_for_load_state("networkidle")
+        await self.page.wait_for_timeout(2000)
+        print("  ✓ 매출 등록 완료")
+
+        # ── 6. 통계 → 결제수단별 통계에서 확인 ──
+        await self._open_statistics_page()
+        await self._open_stat_detail("결제 수단별 통계")
+        await self._apply_today_filter()
+
+        # 결제수단별 통계 테이블에서 "페이 추가 테스트" 확인
+        body_text = await self.page.locator("body").inner_text()
+        assert payment_name in body_text, f"통계에 '{payment_name}' 미노출"
+        print(f"  ✓ 통계에 '{payment_name}' 확인")
+        await self._go_back_from_statistics_detail()
+
+        # ── 7. 매출 삭제 ──
+        await self.page.locator("h3:has-text('매출')").first.click()
+        await self.page.wait_for_timeout(500)
+        sales_link2 = self.page.locator("text=매출 현황").first
+        if await sales_link2.count() > 0:
+            await sales_link2.click()
+            await self.page.wait_for_load_state("networkidle")
+            await self.page.wait_for_timeout(1000)
+
+        # "페이 추가 테스트" 결제수단으로 등록된 매출 행 찾기
+        sales_rows = self.page.locator("tr, li").filter(has_text=payment_name)
+        row_count = await sales_rows.count()
+        print(f"  '{payment_name}' 매출 행: {row_count}건")
+
+        for i in range(row_count):
+            row = sales_rows.first  # 삭제 후 DOM이 갱신되므로 항상 first
+            delete_link = row.locator("a:has-text('삭제'), button:has-text('삭제')").first
+            await expect(delete_link).to_be_visible(timeout=5000)
+            await delete_link.scroll_into_view_if_needed()
+
+            async with self.page.expect_event("dialog", timeout=5000) as dlg_info:
+                await delete_link.click()
+            dialog = await dlg_info.value
+            print(f"  삭제 확인: {dialog.message[:50]}")
+            await dialog.accept()
+            await self.page.wait_for_timeout(1500)
+
+        print("  ✓ 매출 삭제 완료")
+
+        # ── 8. 결제수단 삭제 ──
+        new_item2 = self.page.locator(".new-item").first
+        await expect(new_item2).to_be_visible(timeout=5000)
+        await new_item2.click()
+        await self.page.wait_for_load_state("networkidle")
+        await self.page.wait_for_timeout(1500)
+
+        settings_btn2 = self.page.locator("button:has-text('결제 수단 설정'):visible").first
+        await expect(settings_btn2).to_be_visible(timeout=5000)
+        await settings_btn2.click()
+        await self.page.wait_for_timeout(1000)
+
+        # 편집 → 삭제
+        edit_btn = self.page.locator("button:has-text('편집')").last
+        await edit_btn.scroll_into_view_if_needed()
+        await edit_btn.click()
+        await self.page.wait_for_timeout(500)
+
+        delete_btn = self.page.locator("button:has-text('삭제')").first
+        await expect(delete_btn).to_be_visible(timeout=3000)
+        await delete_btn.click()
+        await self.page.wait_for_timeout(1000)
+
+        # 삭제 확인
+        confirm_btn = self.page.locator("button:has-text('삭제'), button:has-text('확인')").last
+        if await confirm_btn.count() > 0 and await confirm_btn.is_visible():
+            await confirm_btn.click()
+            await self.page.wait_for_timeout(1000)
+
+        print(f"  ✓ '{payment_name}' 결제수단 삭제 완료")
+
+        # 닫기
+        close_btn2 = self.page.locator("button:has(svg[icon='systemX']):visible, button[aria-label='close']:visible").first
+        if await close_btn2.count() > 0:
+            await close_btn2.click()
+        else:
+            await self.page.keyboard.press("Escape")
+        await self.page.wait_for_timeout(500)
+
+        print("=== 커스텀 결제수단 테스트 완료 ===\n")
+
+    async def block_reservation(self):
+        """예약막기 등록"""
+        print("=== 예약막기 테스트 시작 ===")
+        await self.ensure_calendar_page()
+        await self._move_calendar_to_today()
+
+        # 일간 뷰로 전환
+        day_btn = self.page.locator("button.sc-76a9c92e-1:has-text('일'):visible").first
+        if await day_btn.count() > 0:
+            await day_btn.click()
+            await self.page.wait_for_timeout(500)
+
+        # ── 1. FAB → 예약 막기 ──
+        print("1. FAB 버튼 → 예약 막기 클릭")
+        await self._dismiss_active_dimmer()
+        await self.page.locator("#floating-layout button:visible").first.click(force=True)
+        await self.page.wait_for_timeout(500)
+
+        # FAB 메뉴의 "예약 막기" LI 클릭 (사이드바 h4가 아닌 FAB UL > LI 내 항목)
+        block_li = self.page.locator("ul li:has(h4:has-text('예약 막기'))").first
+        if await block_li.count() > 0:
+            await block_li.click(force=True)
+        else:
+            # fallback: FAB 메뉴 근처의 두 번째 h4
+            await self.page.locator("h4:has-text('예약 막기')").nth(1).click(force=True)
+        await self.page.wait_for_timeout(1000)
+
+        # ── 2. 예약막기 폼 입력 ──
+        print("2. 예약막기 폼 입력")
+        reason_input = self.page.locator("input[name='reason']:visible, input[placeholder*='사유']:visible").first
+        await expect(reason_input).to_be_visible(timeout=5000)
+        await reason_input.fill("자동화 예약막기 테스트")
+
+        # 시작 시간 선택: 오후 7:00 (다른 예약과 겹치지 않는 시간)
+        start_time_target = "오후 7:00"
+        print(f"  시작 시간: {start_time_target}")
+
+        # #startTime 드롭다운 클릭 → 옵션 선택
+        start_wrapper = self.page.locator("#startTime")
+        await start_wrapper.locator("button.select-display").click(force=True)
+        await self.page.wait_for_timeout(300)
+        await start_wrapper.locator(f"li button:has-text('{start_time_target}')").first.click(force=True)
+        await self.page.wait_for_timeout(300)
+
+        # 담당자/반복 설정은 디폴트 유지
+        print("  담당자: 디폴트 (샵주테스트), 반복: 반복 안 함")
+
+        # ── 3. 등록 ──
+        print("3. 등록 클릭")
+        register_btn = self.page.locator("button:has-text('등록'):visible").first
+        await expect(register_btn).to_be_visible(timeout=3000)
+        await register_btn.click()
+        await self.page.wait_for_load_state("networkidle")
+        await self.page.wait_for_timeout(1000)
+
+        # dimmer 처리
+        try:
+            await self.page.wait_for_selector("#modal-dimmer.isActiveDimmed", state="hidden", timeout=5000)
+        except Exception:
+            await self.page.keyboard.press("Escape")
+            await self.page.wait_for_timeout(500)
+
+        print("✓ 예약막기 등록 완료")
+        print("=== 예약막기 테스트 완료 ===\n")
+
+    async def block_reservation_repeat(self):
+        """반복 예약막기 등록 (매일, 생성 횟수 3회)"""
+        print("=== 반복 예약막기 테스트 시작 ===")
+        await self.ensure_calendar_page()
+        await self._move_calendar_to_today()
+
+        # 일간 뷰로 전환
+        day_btn = self.page.locator("button.sc-76a9c92e-1:has-text('일'):visible").first
+        if await day_btn.count() > 0:
+            await day_btn.click()
+            await self.page.wait_for_timeout(500)
+
+        # ── 1. FAB → 예약 막기 ──
+        print("1. FAB 버튼 → 예약 막기 클릭")
+        await self._dismiss_active_dimmer()
+        await self.page.locator("#floating-layout button:visible").first.click(force=True)
+        await self.page.wait_for_timeout(500)
+
+        block_li = self.page.locator("ul li:has(h4:has-text('예약 막기'))").first
+        if await block_li.count() > 0:
+            await block_li.click(force=True)
+        else:
+            await self.page.locator("h4:has-text('예약 막기')").nth(1).click(force=True)
+        await self.page.wait_for_timeout(1000)
+
+        # ── 2. 폼 입력 ──
+        print("2. 반복 예약막기 폼 입력")
+        reason_input = self.page.locator("input[name='reason']:visible, input[placeholder*='사유']:visible").first
+        await expect(reason_input).to_be_visible(timeout=5000)
+        await reason_input.fill("자동화 반복 예약막기 테스트")
+
+        # 시작 시간: 오후 7:30
+        start_time_target = "오후 7:30"
+        print(f"  시작 시간: {start_time_target}")
+        start_wrapper = self.page.locator("#startTime")
+        await start_wrapper.locator("button.select-display").click(force=True)
+        await self.page.wait_for_timeout(300)
+        await start_wrapper.locator(f"li button:has-text('{start_time_target}')").first.click(force=True)
+        await self.page.wait_for_timeout(300)
+
+        # 반복 설정: 매일
+        print("  반복 설정: 매일")
+        repeat_wrapper = self.page.locator("#repeatSetting")
+        await repeat_wrapper.locator("button.select-display").click(force=True)
+        await self.page.wait_for_timeout(300)
+        await repeat_wrapper.locator("li button:has-text('매일')").first.click(force=True)
+        await self.page.wait_for_timeout(300)
+
+        # 반복 종료 조건: 생성 횟수 3회
+        print("  반복 종료 조건: 생성 횟수 3회")
+        end_wrapper = self.page.locator("#endConditionType")
+        await end_wrapper.locator("button.select-display").click(force=True)
+        await self.page.wait_for_timeout(300)
+        await end_wrapper.locator("li button:has-text('생성 횟수')").first.click(force=True)
+        await self.page.wait_for_timeout(300)
+
+        count_input = self.page.locator("input[name='createCount']:visible").first
+        await count_input.fill("3")
+
+        # ── 3. 등록 ──
+        print("3. 등록 클릭")
+        register_btn = self.page.locator("button:has-text('등록'):visible").first
+        await expect(register_btn).to_be_visible(timeout=3000)
+        await register_btn.click()
+        await self.page.wait_for_load_state("networkidle")
+        await self.page.wait_for_timeout(1000)
+
+        # dimmer 처리
+        try:
+            await self.page.wait_for_selector("#modal-dimmer.isActiveDimmed", state="hidden", timeout=5000)
+        except Exception:
+            await self.page.keyboard.press("Escape")
+            await self.page.wait_for_timeout(500)
+
+        print("✓ 반복 예약막기 등록 완료")
+        print("=== 반복 예약막기 테스트 완료 ===\n")
+
+    async def _scroll_to_time_and_find_block(self, block_text):
+        """캘린더 일간 뷰에서 booking-stop 블록을 스크롤하며 찾기"""
+        for step in range(8):
+            block = self.page.locator("div.booking-stop").filter(has_text=block_text).first
+            if await block.count() > 0 and await block.is_visible():
+                return block
+            await self.page.mouse.wheel(0, 400)
+            await self.page.wait_for_timeout(300)
+        return None
+
+    async def verify_block_reservation(self):
+        """단일 예약막기 검증 - 오늘 캘린더에서 오후 7:00 블록 확인"""
+        print("=== 단일 예약막기 검증 시작 ===")
+        await self.ensure_calendar_page()
+        await self._move_calendar_to_today()
+        await self.page.locator("button.sc-76a9c92e-1:has-text('일'):visible").first.click()
+        await self.page.wait_for_timeout(500)
+
+        block = await self._scroll_to_time_and_find_block("자동화 예약막기 테스트")
+        assert block is not None, "단일 예약막기 블록을 찾을 수 없습니다"
+        await expect(block).to_be_visible(timeout=5000)
+        print("✓ 오늘 오후 7:00 단일 예약막기 블록 확인 완료")
+        print("=== 단일 예약막기 검증 완료 ===\n")
+
+    async def verify_block_reservation_repeat(self):
+        """반복 예약막기 검증 - 오늘/내일/모레 캘린더에서 오후 7:30 블록 확인"""
+        print("=== 반복 예약막기 검증 시작 ===")
+        await self.ensure_calendar_page()
+        await self._move_calendar_to_today()
+        await self.page.locator("button.sc-76a9c92e-1:has-text('일'):visible").first.click()
+        await self.page.wait_for_timeout(500)
+
+        # 다음날 이동 버튼
+        next_btn = self.page.locator("button.fc-next-button:visible, button[aria-label='next']:visible").first
+
+        for day_idx, day_label in enumerate(["오늘", "내일", "모레"]):
+            if day_idx > 0:
+                await next_btn.click(force=True)
+                await self.page.wait_for_timeout(500)
+
+            block = await self._scroll_to_time_and_find_block("자동화 반복 예약막기 테스트")
+            assert block is not None, f"{day_label} 반복 예약막기 블록을 찾을 수 없습니다"
+            await expect(block).to_be_visible(timeout=5000)
+            print(f"✓ {day_label} 오후 7:30 반복 예약막기 블록 확인 완료")
+
+        # 오늘로 복귀
+        await self._move_calendar_to_today()
+        print("=== 반복 예약막기 검증 완료 ===\n")
+
+    async def delete_block_reservation(self):
+        """단일 예약막기 삭제"""
+        print("=== 단일 예약막기 삭제 시작 ===")
+        base = self.base_url.replace("/signin", "")
+        await self.page.goto(f"{base}/book/calendar")
+        await self.page.wait_for_load_state("networkidle")
+        await self._move_calendar_to_today()
+        await self.page.locator("button.sc-76a9c92e-1:has-text('일'):visible").first.click()
+        await self.page.wait_for_timeout(500)
+
+        # 블록 찾기 → 클릭
+        block = await self._scroll_to_time_and_find_block("자동화 예약막기 테스트")
+        assert block is not None, "단일 예약막기 블록을 찾을 수 없습니다"
+        await block.click(force=True)
+        await self.page.wait_for_timeout(1000)
+
+        # 삭제 버튼 클릭
+        await self.page.locator("button").filter(has_text="삭제").first.click()
+        await self.page.wait_for_timeout(500)
+
+        # 모달 "예약 막기를 삭제하시겠습니까?" → 삭제 클릭 (두 번째 삭제 버튼)
+        confirm_btn = self.page.locator("button").filter(has_text="삭제").nth(1)
+        await expect(confirm_btn).to_be_visible(timeout=5000)
+        # alert 핸들러 등록
+        self.page.once("dialog", lambda dialog: asyncio.ensure_future(dialog.accept()))
+        await confirm_btn.click()
+        await self.page.wait_for_timeout(1000)
+        await self.page.wait_for_load_state("networkidle")
+
+        print("✓ 단일 예약막기 삭제 완료")
+        print("=== 단일 예약막기 삭제 완료 ===\n")
+
+    async def delete_block_reservation_repeat(self):
+        """반복 예약막기 삭제 (모든 일정)"""
+        print("=== 반복 예약막기 삭제 시작 ===")
+        base = self.base_url.replace("/signin", "")
+        await self.page.goto(f"{base}/book/calendar")
+        await self.page.wait_for_load_state("networkidle")
+        await self._move_calendar_to_today()
+        await self.page.locator("button.sc-76a9c92e-1:has-text('일'):visible").first.click()
+        await self.page.wait_for_timeout(500)
+
+        # 블록 찾기 → 클릭
+        block = await self._scroll_to_time_and_find_block("자동화 반복 예약막기 테스트")
+        assert block is not None, "반복 예약막기 블록을 찾을 수 없습니다"
+        await block.click(force=True)
+        await self.page.wait_for_timeout(1000)
+
+        # 삭제 버튼 클릭
+        await self.page.locator("button").filter(has_text="삭제").first.click()
+        await self.page.wait_for_timeout(500)
+
+        # 반복 일정 삭제 모달 → "모든 일정" 라디오 선택
+        await self.page.locator("label").filter(has_text="모든 일정").click()
+        await self.page.wait_for_timeout(300)
+
+        # 모달 내 삭제 버튼 클릭 (마지막 삭제 버튼 = 빨간 버튼)
+        modal_delete_btn = self.page.locator("button").filter(has_text="삭제").last
+        await expect(modal_delete_btn).to_be_visible(timeout=5000)
+        # alert 핸들러 등록
+        self.page.once("dialog", lambda dialog: asyncio.ensure_future(dialog.accept()))
+        await modal_delete_btn.click()
+        await self.page.wait_for_timeout(1000)
+        await self.page.wait_for_load_state("networkidle")
+
+        print("✓ 반복 예약막기 삭제 완료 (모든 일정)")
+        print("=== 반복 예약막기 삭제 완료 ===\n")
+
 
 @pytest.mark.asyncio
 async def test_login_and_add_customers_v2():

@@ -337,6 +337,11 @@ def pytest_sessionfinish(session, exitstatus):
             ("test_customer_detail_verification", "고객 상세 검증"),
             ("test_ticket_charge_from_customer_detail", "티켓 충전"),
             ("test_make_reservations", "예약 등록"),
+            ("test_verify_calendar_reservations", "캘린더 예약 검증"),
+            ("test_verify_shop_status_today_summary", "샵 현황 요약"),
+            ("test_verify_statistics_details", "통계 상세"),
+            ("test_custom_payment_method", "커스텀 결제수단"),
+            ("test_block_reservation", "예약막기"),
         ]
         v3_any = any(case_map.get(c) for c, _ in v3_cases)
         if v3_any:
