@@ -1,0 +1,28 @@
+
+# Playwright
+node_modules/
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+
+# Python
+__pycache__/
+*.pyc
+
+# Env / Secrets
+.env.*
+!.env.*.example
+
+# IDE
+.idea/
+.DS_Store
+
+# Artifacts
+qa_artifacts/
+auto_web_test/qa_artifacts/
+auto_web_test/B2B_tests/screenshots/
+dogfood-output/
+
+# Temp
+auto_web_test/B2B_tests/_verify_code.txt
