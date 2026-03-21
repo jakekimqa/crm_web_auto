@@ -1,7 +1,7 @@
 """
 B2C 예약 3건 → B2B 취소 + 사유 검증 → 매출 등록 → 공비서 예약 OFF → 콕예약 + 매출 등록
 """
-import os, re, sys, json, urllib.request
+import asyncio, os, re, sys, json, urllib.request
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -45,6 +45,75 @@ async def test_b2c_booking_cancel_with_default_reason():
             if "토글이 ON 상태" not in str(exc) and "activate-switch" not in str(exc):
                 raise
         print("✓ Phase 1 완료\n")
+
+        # ── Phase 1.2: 샵 소식 작성 ──
+        print("=== Phase 1.2: 샵 소식 작성 ===")
+        news_title = f"자동화 샵 소식 {runner.mmdd}"
+        news_content = f"자동화 테스트 샵 소식 상세 내용입니다. ({runner.mmdd})"
+        test_image_path = str(Path(__file__).parent / "test_image.png")
+
+        await runner.page.goto(f"{CRM_BASE_URL}/b2c/shop-news/new")
+        await runner.page.wait_for_load_state("networkidle")
+        await runner.page.wait_for_timeout(1000)
+
+        # 제목 입력
+        title_input = runner.page.locator("input[placeholder*='50자']").first
+        await expect(title_input).to_be_visible(timeout=5000)
+        await title_input.fill(news_title)
+        print(f"  ✓ 제목: {news_title}")
+
+        # 대표 소식으로 설정 체크 확인 (기본 체크됨)
+        representative_label = runner.page.locator("label").filter(has_text="대표 소식으로 설정").first
+        await expect(representative_label).to_be_visible(timeout=5000)
+        print("  ✓ 대표 소식으로 설정: 체크됨")
+
+        # 상세 내용 입력
+        content_textarea = runner.page.locator("textarea").first
+        await expect(content_textarea).to_be_visible(timeout=5000)
+        await content_textarea.fill(news_content)
+        print(f"  ✓ 상세 내용: {news_content}")
+
+        # 사진 업로드 → 모달 노출 대기
+        file_input = runner.page.locator("input[type='file']").first
+        await file_input.set_input_files(test_image_path)
+        await runner.page.wait_for_timeout(2000)
+
+        # "샵 소식 사진" 모달 내 [저장] 클릭 → "이미지 등록이 완료되었습니다." alert
+        photo_modal = runner.page.locator("[role='dialog']:visible, .modal:visible, #modal-content:visible").first
+        await expect(photo_modal).to_be_visible(timeout=5000)
+        modal_save_btn = photo_modal.locator("button:has-text('저장')").first
+        await expect(modal_save_btn).to_be_visible(timeout=5000)
+        print("  ✓ 사진 모달 노출 확인")
+        runner.page.once("dialog", lambda d: asyncio.ensure_future(d.accept()))
+        await modal_save_btn.click(force=True)
+        await runner.page.wait_for_timeout(2000)
+        print("  ✓ 사진 업로드 저장 완료")
+
+        # dimmer 닫기
+        for _ in range(5):
+            dim = runner.page.locator("#modal-dimmer.isActiveDimmed:visible").first
+            if await dim.count() > 0:
+                await dim.click(force=True)
+                await runner.page.wait_for_timeout(500)
+            else:
+                break
+
+        # 우측 상단 [저장] 클릭 → 샵 소식 최종 저장
+        top_save_btn = runner.page.locator("button:has-text('저장'):visible").first
+        await expect(top_save_btn).to_be_visible(timeout=5000)
+        await top_save_btn.click(force=True)
+        await runner.page.wait_for_timeout(2000)
+        await runner.page.wait_for_load_state("networkidle")
+
+        # 소식 목록 페이지로 이동하여 확인
+        await runner.page.goto(f"{CRM_BASE_URL}/b2c/shop-news?fromMenu=true")
+        await runner.page.wait_for_load_state("networkidle")
+        await runner.page.wait_for_timeout(1000)
+        body_text = await runner.page.locator("body").inner_text()
+        assert news_title in body_text, f"샵 소식 저장 실패: '{news_title}' 미노출"
+        print("  ✓ 샵 소식 저장 완료")
+        await runner.page.screenshot(path=str(SHOT_DIR / "news_01_saved.png"))
+        print("✓ Phase 1.2 완료\n")
 
         # ── Phase 1.5: 직원 입사 신청 + 원장 승인 ──
         print("=== Phase 1.5: 직원 입사 신청 + 원장 승인 ===")
@@ -168,12 +237,24 @@ async def test_b2c_booking_cancel_with_default_reason():
 
         await zero_page.bring_to_front()
         await _kakao_login(zero_page)
+
+        # ── B2C 샵 소식 검증 (샵 페이지 진입 시 지도 아래 노출) ──
+        print("  --- B2C 샵 소식 검증 ---")
+        await zero_page.goto(f"{ZERO_BASE_URL}/shop/{shop_id}")
+        await zero_page.wait_for_load_state("networkidle")
+        await zero_page.wait_for_timeout(2000)
+
+        # 지도 아래 소식 영역에서 제목 확인
+        news_el = zero_page.locator(f"text={news_title}").first
+        await expect(news_el).to_be_visible(timeout=10000)
+        print(f"  ✓ B2C 샵 소식 노출 확인: {news_title}")
+        await zero_page.screenshot(path=str(SHOT_DIR / "news_02_b2c_verified.png"))
+
         reservation_date = await _make_reservation(zero_page, shop_name, shop_id)
         print("  ✓ 첫 번째 예약 완료")
 
         # ── 두 번째 예약: 컷 > 남성컷 ──
         print("  --- 두 번째 예약: 컷 > 남성컷 ---")
-        ZERO_BASE_URL = os.getenv("ZERO_BASE_URL", "https://qa-zero.gongbiz.kr")
         await zero_page.goto(f"{ZERO_BASE_URL}/shop/{shop_id}")
         await zero_page.wait_for_load_state("networkidle")
         await zero_page.wait_for_timeout(1000)
@@ -605,6 +686,255 @@ async def test_b2c_booking_cancel_with_default_reason():
         print("  ✓ 매출 등록 완료 상태 확인")
         await crm_page.screenshot(path=str(SHOT_DIR / "cancel_05c_sales_done.png"))
         print("✓ Phase 4.5 완료\n")
+
+        # ── Phase 4.6: 확인 후 확정 예약 ──
+        print("=== Phase 4.6: 확인 후 확정 예약 ===")
+
+        # Step 1: CRM 예약 방식 변경 → "담당자 확인 후 예약 확정"
+        await crm_page.goto(f"{CRM_BASE_URL}/b2c/setting")
+        await crm_page.wait_for_load_state("networkidle")
+        await crm_page.wait_for_timeout(1000)
+
+        # "온라인 예약 정보" 옆 수정하기 클릭
+        online_info_section = crm_page.locator("h3:has-text('온라인 예약 정보')").first
+        await expect(online_info_section).to_be_visible(timeout=5000)
+        edit_btn = online_info_section.locator("..").locator("button:has-text('수정하기')").first
+        await expect(edit_btn).to_be_visible(timeout=5000)
+        await edit_btn.click()
+        await crm_page.wait_for_load_state("networkidle")
+        await crm_page.wait_for_timeout(1000)
+        print("  ✓ 온라인 예약 정보 수정 페이지 진입")
+
+        # "담당자 확인 후 예약 확정" 선택
+        confirm_option = crm_page.locator("label[for='MANUAL_CONFIRMED']").first
+        await expect(confirm_option).to_be_visible(timeout=5000)
+        await confirm_option.click()
+        await crm_page.wait_for_timeout(500)
+        print("  ✓ 예약 방식: 담당자 확인 후 예약 확정 선택")
+
+        # [저장] 클릭
+        save_btn = crm_page.locator("button[data-track-id='b2c_info_save']").first
+        await expect(save_btn).to_be_visible(timeout=5000)
+        await save_btn.click()
+        await crm_page.wait_for_load_state("networkidle")
+        await crm_page.wait_for_timeout(1000)
+        print("  ✓ 예약 방식 변경 저장 완료")
+
+        # Step 2: B2C 예약 진행
+        print("  --- B2C 확인 후 확정 예약 진행 ---")
+        await zero_page.goto(f"{ZERO_BASE_URL}/shop/{shop_id}")
+        await zero_page.wait_for_load_state("networkidle")
+        await zero_page.wait_for_timeout(1000)
+
+        # 시술 선택 (첫 번째 체크박스)
+        service_cb = zero_page.get_by_role("checkbox").first
+        await expect(service_cb).to_be_visible(timeout=10000)
+        await service_cb.click()
+        await zero_page.wait_for_timeout(500)
+
+        # 예약하기 클릭
+        booking_btn = zero_page.locator("button:has-text('예약하기')").last
+        await expect(booking_btn).to_be_visible(timeout=10000)
+        await booking_btn.click()
+        await zero_page.wait_for_load_state("networkidle")
+        await zero_page.wait_for_timeout(1000)
+
+        # 담당자 선택
+        designer_row = zero_page.locator("text=샵주테스트").first
+        if await designer_row.count() > 0 and await designer_row.is_visible():
+            select_btn = zero_page.locator("button:has-text('선택')").first
+            await expect(select_btn).to_be_visible(timeout=5000)
+            await select_btn.click()
+            await zero_page.wait_for_load_state("networkidle")
+            await zero_page.wait_for_timeout(1000)
+            print("  ✓ 담당자 선택: 샵주테스트")
+
+        # 날짜 선택 (내일)
+        tomorrow = datetime.now() + timedelta(days=1)
+        day_str = str(tomorrow.day)
+        date_btn = zero_page.get_by_role("button", name=day_str, exact=True).first
+        await expect(date_btn).to_be_visible(timeout=10000)
+        await date_btn.click()
+        await zero_page.wait_for_timeout(1000)
+
+        # 시간 선택
+        time_btn = zero_page.locator("button:has-text(':00'), button:has-text(':30')").first
+        await expect(time_btn).to_be_visible(timeout=10000)
+        confirm_time_text = await time_btn.inner_text()
+        await time_btn.click()
+        await zero_page.wait_for_timeout(500)
+        print(f"  ✓ 시간 선택: {confirm_time_text}")
+
+        # 예약하기 → 결제 페이지
+        booking_confirm = zero_page.locator("button:has-text('예약하기')").last
+        await expect(booking_confirm).to_be_visible(timeout=10000)
+        await booking_confirm.click()
+        await zero_page.wait_for_load_state("networkidle")
+        await zero_page.wait_for_timeout(2000)
+
+        # 결제 페이지: 최종 예약하기
+        page_text = await zero_page.locator("body").inner_text()
+        if "예약 완료" not in page_text and "예약 신청" not in page_text:
+            final_booking = zero_page.locator("button:has-text('예약하기')").last
+            await expect(final_booking).to_be_visible(timeout=15000)
+            await final_booking.click()
+            await zero_page.wait_for_load_state("networkidle")
+            await zero_page.wait_for_timeout(2000)
+
+        # Step 3: B2C 예약 신청 텍스트 검증
+        complete_text = await zero_page.locator("body").inner_text()
+        assert "예약 신청" in complete_text, f"확인 후 확정 예약 신청 텍스트 미노출: {complete_text[:200]}"
+        assert "샵에서 확인 후 예약을 확정하면" in complete_text, f"확인 후 확정 안내 텍스트 미노출: {complete_text[:200]}"
+        print("  ✓ B2C 예약 신청 텍스트 확인: '예약 신청 되었어요...'")
+        await zero_page.screenshot(path=str(SHOT_DIR / "phase46_01_b2c_pending.png"))
+
+        # Step 4: CRM 캘린더에서 해당 예약 확인
+        await crm_page.bring_to_front()
+        await _switch_shop(crm_page, shop_name)
+
+        d = datetime.now() + timedelta(days=1)
+        await crm_page.goto(f"{CRM_BASE_URL}/book/calendar")
+        await crm_page.wait_for_load_state("networkidle")
+        await crm_page.wait_for_timeout(2000)
+
+        # dimmer 닫기
+        for _ in range(5):
+            dim = crm_page.locator("#modal-dimmer.isActiveDimmed:visible").first
+            if await dim.count() > 0:
+                await dim.click(force=True)
+                await crm_page.wait_for_timeout(500)
+            else:
+                break
+
+        # "일" 보기 전환
+        for name in ["일", "날짜별"]:
+            btn = crm_page.get_by_role("button", name=name).first
+            if await btn.count() > 0 and await btn.is_visible():
+                await btn.click()
+                await crm_page.wait_for_load_state("networkidle")
+                await crm_page.wait_for_timeout(1500)
+                break
+
+        # dimmer 닫기
+        for _ in range(3):
+            dim = crm_page.locator("#modal-dimmer.isActiveDimmed:visible").first
+            if await dim.count() > 0:
+                await dim.click(force=True)
+                await crm_page.wait_for_timeout(500)
+            else:
+                break
+
+        # 내일 날짜로 이동
+        target_day = f"3. {d.day}"
+        header = await crm_page.locator("h2.fc-toolbar-title, .fc-toolbar-title").first.text_content()
+        for _ in range(10):
+            if target_day in header:
+                break
+            current_day = int(re.search(r"3\.\s*(\d+)", header).group(1))
+            btn_cls = "fc-next-button" if current_day < d.day else "fc-prev-button"
+            nav_btn = crm_page.locator(f"button.{btn_cls}").first
+            await expect(nav_btn).to_be_visible(timeout=5000)
+            await nav_btn.click()
+            await crm_page.wait_for_load_state("networkidle")
+            await crm_page.wait_for_timeout(1500)
+            header = await crm_page.locator("h2.fc-toolbar-title, .fc-toolbar-title").first.text_content()
+        print(f"  ✓ 캘린더 날짜: {header.strip()}")
+
+        # dimmer 닫기
+        for _ in range(3):
+            dim = crm_page.locator("#modal-dimmer.isActiveDimmed:visible").first
+            if await dim.count() > 0:
+                await dim.click(force=True)
+                await crm_page.wait_for_timeout(500)
+            else:
+                break
+
+        # 예약 블록 클릭 → 상세 진입
+        pending_block = crm_page.locator("div.READY.booking-normal").first
+        await expect(pending_block).to_be_visible(timeout=15000)
+        await pending_block.click(force=True)
+        await crm_page.wait_for_timeout(3000)
+        await crm_page.wait_for_load_state("networkidle")
+        confirm_detail_url = crm_page.url
+        print(f"  ✓ 예약 상세: {confirm_detail_url}")
+
+        # Step 5: "확인 후 확정 예약입니다" 안내 확인
+        detail_text = await crm_page.locator("body").inner_text()
+        assert "확인 후 확정" in detail_text or "예약 대기" in detail_text, f"확인 후 확정 안내 미노출: {detail_text[:300]}"
+        print("  ✓ '확인 후 확정 예약입니다' 안내 확인")
+        await crm_page.screenshot(path=str(SHOT_DIR / "phase46_02_crm_pending.png"))
+
+        # Step 6: [예약 확정] 클릭
+        confirm_btn = crm_page.locator("button:has-text('예약 확정')").first
+        await expect(confirm_btn).to_be_visible(timeout=5000)
+        await confirm_btn.click()
+        await crm_page.wait_for_load_state("networkidle")
+        await crm_page.wait_for_timeout(2000)
+        print("  ✓ 예약 확정 완료")
+        await crm_page.screenshot(path=str(SHOT_DIR / "phase46_03_confirmed.png"))
+
+        # 확정 후 캘린더로 이동될 수 있으므로 다시 예약 상세로 진입
+        if "detail" not in crm_page.url:
+            await crm_page.goto(confirm_detail_url)
+            await crm_page.wait_for_load_state("networkidle")
+            await crm_page.wait_for_timeout(2000)
+
+        # Step 7: 매출 등록
+        sales_btn = crm_page.locator("h4:has-text('매출 등록'), button:has-text('매출 등록')").first
+        await expect(sales_btn).to_be_visible(timeout=10000)
+        await sales_btn.click()
+        await crm_page.wait_for_load_state("networkidle")
+        await crm_page.wait_for_timeout(2000)
+        print(f"  ✓ 매출 등록 페이지: {crm_page.url}")
+
+        # 결제 수단: 카드 선택
+        card_btn = crm_page.get_by_text("카드", exact=True).first
+        if await card_btn.count() == 0:
+            card_btn = crm_page.locator("button:has-text('카드'), label:has-text('카드')").first
+        await expect(card_btn).to_be_visible(timeout=10000)
+        await card_btn.click()
+        await crm_page.wait_for_timeout(500)
+        print("  ✓ 결제 수단: 카드 선택")
+
+        # 매출 저장
+        save_sales_btn = crm_page.locator("button:has-text('매출 저장')").first
+        await expect(save_sales_btn).to_be_visible(timeout=10000)
+        await save_sales_btn.click()
+        await crm_page.wait_for_load_state("networkidle")
+        await crm_page.wait_for_timeout(3000)
+        print("  ✓ 매출 저장 완료")
+
+        # 매출 등록 완료 확인
+        await crm_page.goto(confirm_detail_url)
+        await crm_page.wait_for_load_state("networkidle")
+        await crm_page.wait_for_timeout(2000)
+        detail_body = await crm_page.locator("body").inner_text()
+        assert "매출" in detail_body, f"매출 등록 확인 실패: {detail_body[:200]}"
+        print("  ✓ 매출 등록 완료 상태 확인")
+        await crm_page.screenshot(path=str(SHOT_DIR / "phase46_04_sales_done.png"))
+
+        # 예약 방식을 다시 "즉시 예약 확정"으로 복원
+        await crm_page.goto(f"{CRM_BASE_URL}/b2c/setting")
+        await crm_page.wait_for_load_state("networkidle")
+        await crm_page.wait_for_timeout(1000)
+        online_info_section2 = crm_page.locator("h3:has-text('온라인 예약 정보')").first
+        edit_btn2 = online_info_section2.locator("..").locator("button:has-text('수정하기')").first
+        await expect(edit_btn2).to_be_visible(timeout=5000)
+        await edit_btn2.click()
+        await crm_page.wait_for_load_state("networkidle")
+        await crm_page.wait_for_timeout(1000)
+        instant_option = crm_page.locator("label[for='AUTO_CONFIRMED']").first
+        await expect(instant_option).to_be_visible(timeout=5000)
+        await instant_option.click()
+        await crm_page.wait_for_timeout(500)
+        restore_save = crm_page.locator("button[data-track-id='b2c_info_save']").first
+        await expect(restore_save).to_be_visible(timeout=5000)
+        await restore_save.click()
+        await crm_page.wait_for_load_state("networkidle")
+        await crm_page.wait_for_timeout(1000)
+        print("  ✓ 예약 방식 복원: 즉시 예약 확정")
+
+        print("✓ Phase 4.6 완료\n")
 
         # ── Phase 5: 공비서 예약 OFF → B2C 미노출 ──
         print("=== Phase 5: 공비서 예약 OFF → B2C 미노출 ===")

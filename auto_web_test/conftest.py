@@ -286,7 +286,7 @@ def pytest_sessionfinish(session, exitstatus):
     print(f"[SLACK] has_v2={has_v2}")
 
     has_v3 = any("test_b2b_v3.py" in nid for nid in nodeids)
-    has_b2c_cancel = any("test_b2c_cancel_booking.py" in nid for nid in nodeids)
+    has_b2c_cancel = any("test_b2c_flow.py" in nid for nid in nodeids)
     has_b2c_kok = any("test_b2c_kok_booking.py" in nid for nid in nodeids)
     target_files = []
     if has_v2:
@@ -294,7 +294,7 @@ def pytest_sessionfinish(session, exitstatus):
     if has_v3:
         target_files.append("test_b2b_v3.py")
     if has_b2c_cancel:
-        target_files.append("test_b2c_cancel_booking.py")
+        target_files.append("test_b2c_flow.py")
     if has_b2c_kok:
         target_files.append("test_b2c_kok_booking.py")
 
@@ -367,13 +367,15 @@ def pytest_sessionfinish(session, exitstatus):
         # B2C flow (Phase별 상세)
         if case_map.get("test_b2c_booking_cancel_with_default_reason") == "PASS":
             flow_lines.append("")
-            flow_lines.append("*[B2C] test_b2c_cancel_booking.py*")
+            flow_lines.append("*[B2C] test_b2c_flow.py*")
             flow_lines.append("  Phase 1: 샵 생성 + 공비서 입점 ✅")
+            flow_lines.append("  Phase 1.2: 샵 소식 작성 + B2C 노출 검증 ✅")
             flow_lines.append("  Phase 1.5: 직원 입사 신청 + 원장 승인 ✅")
             flow_lines.append("  Phase 2: B2C 예약 3건 (샵주+남성컷+직원) ✅")
             flow_lines.append("  Phase 3: CRM 캘린더 → 예약 취소 ✅")
             flow_lines.append("  Phase 4: 취소 사유 검증 ✅")
             flow_lines.append("  Phase 4.5: 두 번째 예약 매출 등록 ✅")
+            flow_lines.append("  Phase 4.6: 확인 후 확정 예약 + 매출 등록 ✅")
             flow_lines.append("  Phase 5: 공비서 예약 OFF → B2C 미노출 ✅")
             flow_lines.append("  Phase 6: 콕예약 (자동화_헤렌네일) ✅")
             flow_lines.append("  Phase 7: 콕예약 CRM 매출 등록 ✅")
