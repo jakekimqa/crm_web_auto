@@ -85,6 +85,10 @@ async def test_sales_registrations_1_to_5(runner):
     await runner.sales_registrations_5()
 
 
+async def test_verify_send_history(runner):
+    await runner.verify_send_history()
+
+
 async def test_verify_shop_status_today_summary(runner):
     await runner.verify_shop_status_today_summary()
 

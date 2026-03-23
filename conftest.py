@@ -132,7 +132,7 @@ def pytest_sessionfinish(session, exitstatus):
     total = getattr(tr, "_numcollected", 0)
     duration = time.time() - getattr(session, "_t0", time.time())
     nodeids = [item.nodeid for item in getattr(session, "items", [])]
-    has_v2 = any("test_dev_b2b_v2.py" in nid for nid in nodeids)
+    has_v2 = any("test_dev_b2b_v2.py" in nid or "test_b2b_v3.py" in nid for nid in nodeids)
 
     print(f"[SLACK] exitstatus={exitstatus} (0=all passed)")
     print(f"[SLACK] counts={stats}, total={total}, duration={duration:.2f}s")

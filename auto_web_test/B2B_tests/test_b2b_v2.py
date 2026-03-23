@@ -117,6 +117,27 @@ class B2BAutomationV2:
                 await self.page.wait_for_timeout(250)
         raise AssertionError("신규 고객 등록 모달 열기 실패")
 
+    async def _select_referrer(self, referrer_name):
+        """소개자 검색 후 선택"""
+        referrer_input = self.page.locator(
+            "input[placeholder*='이름 또는 연락처를 검색']"
+        ).first
+        await expect(referrer_input).to_be_visible(timeout=5000)
+        await referrer_input.fill(referrer_name)
+        await self.page.wait_for_timeout(1500)
+
+        # 소개자 입력 필드의 부모 컨테이너 내부 드롭다운에서 선택
+        referrer_container = referrer_input.locator("xpath=ancestor::div[contains(@class,'sc-197a4fd4')]")
+        result_item = referrer_container.locator(f"li:has-text('{referrer_name}')").first
+        if await result_item.count() == 0:
+            # fallback: 소개자 라벨 기준으로 컨테이너 탐색
+            referrer_section = self.page.locator("label:has-text('소개자')").locator("..")
+            result_item = referrer_section.locator(f"li:has-text('{referrer_name}')").first
+        await expect(result_item).to_be_visible(timeout=5000)
+        await result_item.click()
+        await self.page.wait_for_timeout(500)
+        print(f"  ✓ 소개자 선택: {referrer_name}")
+
     async def _dismiss_active_dimmer(self):
         for _ in range(5):
             dimmer = self.page.locator("#modal-dimmer.isActiveDimmed").first
@@ -289,6 +310,12 @@ class B2BAutomationV2:
             await self._open_new_customer_modal()
             await self.page.fill("#customer-name", name)
             await self.page.fill("#customer-contact", phone)
+
+            # 2, 3번 고객 등록 시 소개자로 1번 고객 선택
+            if idx >= 2:
+                referrer_name = customers[0][0]
+                await self._select_referrer(referrer_name)
+
             await self.page.locator("button:has-text('고객 등록'):visible").last.click()
             await self._ensure_active_page()
             await self.page.wait_for_timeout(1500)
@@ -2117,6 +2144,64 @@ class B2BAutomationV2:
 
         print("✓ 반복 예약막기 삭제 완료 (모든 일정)")
         print("=== 반복 예약막기 삭제 완료 ===\n")
+
+    async def verify_send_history(self):
+        """전송 내역에서 알림톡 발송 기록 검증"""
+        print("\n=== 전송 내역 검증 시작 ===")
+        await self.focus_main_page()
+
+        # 사이드바 마케팅 > 전송 내역 클릭
+        marketing_menu = self.page.locator("h3:has-text('마케팅')").first
+        await expect(marketing_menu).to_be_visible(timeout=5000)
+        await marketing_menu.click()
+        await self.page.wait_for_load_state("networkidle")
+        await self.page.wait_for_timeout(1000)
+
+        send_history_btn = self.page.locator("button:has-text('전송 내역')").first
+        await expect(send_history_btn).to_be_visible(timeout=5000)
+        await send_history_btn.click()
+        await self.page.wait_for_load_state("networkidle")
+        await self.page.wait_for_timeout(2000)
+
+        # 오늘 날짜 기준 검증할 알림 목록 (디폴트가 알림톡 리스트)
+        today = datetime.now().strftime("%Y-%m-%d")
+        expected = [
+            (f"자동화_{self.mmdd}_1", "예약 확정"),
+            (f"자동화_{self.mmdd}_2", "예약 확정"),
+            (f"자동화_{self.mmdd}_3", "예약 확정"),
+            (f"자동화_{self.mmdd}_1", "정액권 충전"),
+            (f"자동화_{self.mmdd}_1", "정액권 결제"),
+            (f"자동화_{self.mmdd}_2", "티켓 충전"),
+            (f"자동화_{self.mmdd}_2", "티켓 사용"),
+        ]
+
+        # 테이블에서 오늘 날짜 행 전체 추출
+        rows = self.page.locator("tr").filter(has_text=today)
+        row_count = await rows.count()
+        print(f"  오늘({today}) 전송 내역: {row_count}건")
+
+        # 각 행의 고객명 + 내용 수집
+        found_records = []
+        for i in range(row_count):
+            row = rows.nth(i)
+            cells = row.locator("td")
+            if await cells.count() >= 3:
+                customer = (await cells.nth(1).inner_text()).strip()
+                content = (await cells.nth(2).inner_text()).strip()
+                found_records.append((customer, content))
+
+        # 검증
+        for customer_name, keyword in expected:
+            matched = any(
+                customer_name in rec[0] and keyword in rec[1]
+                for rec in found_records
+            )
+            assert matched, (
+                f"전송 내역 미발견: {customer_name} / {keyword}"
+            )
+            print(f"  ✓ {customer_name} — {keyword} 확인")
+
+        print(f"=== 전송 내역 검증 완료 ({len(expected)}건) ===\n")
 
 
 @pytest.mark.asyncio
