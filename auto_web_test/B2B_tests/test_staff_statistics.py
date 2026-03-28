@@ -352,12 +352,30 @@ async def test_staff_statistics_customer_type_total(runner):
     print(f"✓ 직원 통계 고객 유형별 (총 합계 기준) 검증 완료 ({staff_name})")
 
 
-async def test_send_slack_results(runner):
-    """슬랙 결과 전송"""
-    results = {
-        "셋업 (고객/충전/예약/매출)": "PASS",
-        "상품 유형별 통계": "PASS",
-        "고객 유형별 (실 매출 기준)": "PASS",
-        "고객 유형별 (총 합계 기준)": "PASS",
+async def test_send_slack_results(runner, request):
+    """슬랙 결과 전송 — 실제 pytest 결과 기반"""
+    session = request.session
+    case_results = getattr(session, "_case_results", {})
+
+    # 테스트 이름 → 슬랙 표시명 매핑
+    name_map = {
+        "test_setup_customers": "셋업 — 고객 추가",
+        "test_setup_membership_charge": "셋업 — 정액권 충전",
+        "test_setup_family_share": "셋업 — 패밀리 공유",
+        "test_setup_ticket_charge": "셋업 — 티켓 충전",
+        "test_setup_reservations": "셋업 — 예약 등록",
+        "test_setup_verify_calendar": "셋업 — 캘린더 확인",
+        "test_setup_sales_registrations": "셋업 — 매출등록",
+        "test_staff_statistics_product_type": "상품 유형별 통계",
+        "test_staff_statistics_customer_type_real": "고객 유형별 (실 매출 기준)",
+        "test_staff_statistics_customer_type_total": "고객 유형별 (총 합계 기준)",
     }
+
+    results = {}
+    for nodeid, info in case_results.items():
+        test_name = nodeid.split("::")[-1]
+        display_name = name_map.get(test_name)
+        if display_name:
+            results[display_name] = info.get("status", "UNKNOWN")
+
     await _send_slack(results)

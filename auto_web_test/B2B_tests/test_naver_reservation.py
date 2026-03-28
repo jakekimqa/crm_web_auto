@@ -19,9 +19,9 @@ pytestmark = pytest.mark.asyncio(loop_scope="module")
 class NaverReservationTest:
     def __init__(self):
         self.base_url = os.getenv("B2B_BASE_URL", "https://crm-dev1.gongbiz.kr/signin")
-        self.correct_id = os.getenv("B2B_ID", "herrenail")
-        self.correct_password = os.getenv("B2B_PASSWORD", "gong2023@@")
-        self.shop_name = os.getenv("B2B_SHOP_NAME", "네이버테스트 60분")
+        self.correct_id = "herrenail"
+        self.correct_password = "gong2023@@"
+        self.shop_name = "네이버테스트 60분"
         self.headless = os.getenv("B2B_HEADLESS", "0") == "1"
         self.target_date = os.getenv("TARGET_DATE", "2026-04-04")  # YYYY-MM-DD
 
@@ -66,19 +66,19 @@ class NaverReservationTest:
         await self.page.fill('input[name="password"], input[type="password"]', self.correct_password)
         await self.page.click('button[type="submit"], .login-btn')
         await self.page.wait_for_load_state("networkidle")
+        print(f"  로그인 후 URL: {self.page.url}")
 
-        # 샵 선택 (마이페이지에 있을 수 있음)
-        if "/mypage" in self.page.url or "/signin" not in self.page.url:
-            shop_link = self.page.locator(f"text={self.shop_name}").first
-            if await shop_link.count() > 0:
-                # 마이페이지 테이블에서 해당 샵의 "샵으로 이동" 클릭
-                row = self.page.locator(f"tr:has-text('{self.shop_name}')")
-                move_btn = row.locator("a:has-text('샵으로 이동')").first
-                if await move_btn.count() > 0:
-                    await move_btn.click()
-                else:
-                    await shop_link.click()
-                await self.page.wait_for_load_state("networkidle")
+        # 마이페이지로 이동하여 샵 선택
+        base = self.base_url.replace("/signin", "")
+        await self.page.goto(f"{base}/mypage/owner")
+        await self.page.wait_for_load_state("networkidle")
+
+        move_btn = self.page.locator(
+            f"tr:has-text('{self.shop_name}') a:has-text('샵으로 이동')"
+        ).first
+        await move_btn.scroll_into_view_if_needed(timeout=10000)
+        await move_btn.click()
+        await self.page.wait_for_load_state("networkidle")
 
         # 캘린더 페이지로 이동 확인
         await self.page.wait_for_url("**/book/calendar", timeout=10000)
@@ -376,21 +376,21 @@ class NaverReservationTest:
     async def verify_reservation_kimjeck(self):
         """
         시나리오 4: 김제크_직원계정 예약
-        - 예약 상세: 예약금 네이버페이 2,000원
+        - 예약 상세: 예약금 네이버페이 300원
         - 매출 등록: 시술 추가(손>젤기본) → NPay 결제 요청(38,000원) → 취소 → 정액권 → 매출 저장
         """
         print("=== 시나리오 4: 김제크_직원계정 예약 검증 ===")
-        await self._click_reservation_by_staff("김제크_직원계정")
+        await self._click_reservation_by_staff("김제크_직원계정", target_time="오후 3:00")
 
         # 담당자 확인
         staff_heading = self.page.locator("h4:has-text('김제크_직원계정')")
         await expect(staff_heading).to_be_visible(timeout=5000)
         print("✓ 담당자: 김제크_직원계정")
 
-        # 예약금 네이버페이 2,000원 확인
-        deposit_text = self.page.locator("text=2,000원").first
+        # 예약금 네이버페이 300원 확인
+        deposit_text = self.page.locator("text=300원").first
         await expect(deposit_text).to_be_visible(timeout=5000)
-        print("✓ 예약금 네이버페이 2,000원 확인")
+        print("✓ 예약금 네이버페이 300원 확인")
 
         # 매출 등록 진입
         sales_btn = self.page.locator("button:has-text('매출 등록')")
@@ -424,18 +424,18 @@ class NaverReservationTest:
         await self.page.wait_for_timeout(3000)
         print("✓ NPay 결제 요청 클릭")
 
-        # 네이버페이 매장 결제 요청 모달 — 매장 결제 금액 38,000원 확인
+        # 네이버페이 매장 결제 요청 모달 — 매장 결제 금액 39,700원 확인 (총 40,000 - 예약금 300)
         modal_heading = self.page.locator("h3:has-text('네이버페이 매장 결제 요청')")
         await expect(modal_heading).to_be_visible(timeout=5000)
         amount_value = await self.page.evaluate("""() => {
             const inputs = document.querySelectorAll('input[type="text"], input[type="number"], input:not([type])');
             for (const inp of inputs) {
                 const val = inp.value.replace(/,/g, '');
-                if (val === '38000' || inp.value === '38,000') return inp.value;
+                if (val === '39700' || inp.value === '39,700') return inp.value;
             }
             return null;
         }""")
-        assert amount_value is not None, f"매장 결제 금액 38,000원을 찾을 수 없습니다."
+        assert amount_value is not None, f"매장 결제 금액 39,700원을 찾을 수 없습니다."
         print(f"✓ 매장 결제 금액: {amount_value}원 확인")
 
         # 결제 요청 전송 클릭
