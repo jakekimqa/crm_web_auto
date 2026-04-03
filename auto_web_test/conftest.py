@@ -342,6 +342,9 @@ def pytest_sessionfinish(session, exitstatus):
             ("test_verify_statistics_details", "통계 상세"),
             ("test_custom_payment_method", "커스텀 결제수단"),
             ("test_block_reservation", "예약막기"),
+            ("test_staff_statistics_product_type", "직원 통계 (상품 유형별)"),
+            ("test_staff_statistics_customer_type_real", "직원 통계 (고객 유형별 — 실 매출)"),
+            ("test_staff_statistics_customer_type_total", "직원 통계 (고객 유형별 — 총 합계)"),
         ]
         v3_any = any(case_map.get(c) for c, _ in v3_cases)
         if v3_any:

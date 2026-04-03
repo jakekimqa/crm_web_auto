@@ -20,6 +20,8 @@ class B2BAutomationV2:
         self.mmdd = datetime.now().strftime("%m%d")
         self.expected_home_sales = os.getenv("B2B_EXPECTED_HOME_SALES", "320,000원")
         self.expected_home_reservations = os.getenv("B2B_EXPECTED_HOME_RESERVATIONS", "3")
+        self.skip_referrer = os.getenv("SKIP_REFERRER", "0") == "1"
+        self.skip_staff_statistics = os.getenv("SKIP_STAFF_STATISTICS", "0") == "1"
 
         self.playwright = None
         self.browser = None
@@ -312,7 +314,7 @@ class B2BAutomationV2:
             await self.page.fill("#customer-contact", phone)
 
             # 2, 3번 고객 등록 시 소개자로 1번 고객 선택
-            if idx >= 2:
+            if idx >= 2 and not self.skip_referrer:
                 referrer_name = customers[0][0]
                 await self._select_referrer(referrer_name)
 
@@ -1192,7 +1194,7 @@ class B2BAutomationV2:
                 const buttons = [...document.querySelectorAll('button')]
                   .filter((b) => {
                     const text = (b.innerText || '').replace(/\\s+/g, ' ').trim();
-                    if (!text.includes('매출') || !text.includes('저장')) return false;
+                    if (!text.includes('매출') || !text.includes('등록')) return false;
                     if (b.disabled) return false;
                     const r = b.getBoundingClientRect();
                     return r.width > 0 && r.height > 0;
@@ -1212,7 +1214,7 @@ class B2BAutomationV2:
     async def _click_sales_save_button(self):
         point = await self._find_sales_save_click_point()
         if point is None:
-            raise AssertionError("매출 저장 버튼을 찾지 못했습니다.")
+            raise AssertionError("매출 등록 버튼을 찾지 못했습니다.")
         dialog_messages = []
 
         def _auto_dismiss(dlg):
@@ -1685,6 +1687,7 @@ class B2BAutomationV2:
         # ── 1. 매출 페이지 → 신규 매출 등록 ──
         await self.focus_main_page()
         await self.page.locator("h3:has-text('매출')").first.click()
+        await self.page.wait_for_load_state("networkidle")
         await self.page.wait_for_timeout(500)
         sales_link = self.page.locator("text=매출 현황").first
         if await sales_link.count() > 0:
@@ -1800,7 +1803,7 @@ class B2BAutomationV2:
         await self.page.wait_for_timeout(500)
         print(f"  ✓ 결제수단 선택: {payment_name}")
 
-        await self.page.locator("button:has-text('매출 저장'):visible").last.click()
+        await self.page.locator("button:has-text('매출 등록'):visible").last.click()
         await self.page.wait_for_load_state("networkidle")
         await self.page.wait_for_timeout(2000)
         print("  ✓ 매출 등록 완료")
