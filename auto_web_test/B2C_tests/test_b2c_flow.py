@@ -445,13 +445,13 @@ async def test_b2c_booking_cancel_with_default_reason():
 
         # 내일 날짜로 이동
         d = reservation_date
-        target_day = f"3. {d.day}"
+        target_day = f"{d.month}. {d.day}"
         header = await crm_page.locator("h2.fc-toolbar-title, .fc-toolbar-title").first.text_content()
         for _ in range(10):
             if target_day in header:
                 break
             # 현재 날짜에서 숫자 추출하여 방향 결정
-            current_day = int(re.search(r"3\.\s*(\d+)", header).group(1))
+            current_day = int(re.search(rf"{d.month}\.\s*(\d+)", header).group(1))
             btn_cls = "fc-next-button" if current_day < d.day else "fc-prev-button"
             nav_btn = crm_page.locator(f"button.{btn_cls}").first
             await expect(nav_btn).to_be_visible(timeout=5000)
@@ -601,9 +601,9 @@ async def test_b2c_booking_cancel_with_default_reason():
         # 내일로 이동 (헤더 기준)
         header2 = await crm_page.locator("h2.fc-toolbar-title, .fc-toolbar-title").first.text_content()
         for _ in range(10):
-            if f"3. {d.day}" in header2:
+            if f"{d.month}. {d.day}" in header2:
                 break
-            current_day2 = int(re.search(r"3\.\s*(\d+)", header2).group(1))
+            current_day2 = int(re.search(rf"{d.month}\.\s*(\d+)", header2).group(1))
             btn_cls2 = "fc-next-button" if current_day2 < d.day else "fc-prev-button"
             nav_btn2 = crm_page.locator(f"button.{btn_cls2}").first
             await expect(nav_btn2).to_be_visible(timeout=5000)
@@ -667,13 +667,13 @@ async def test_b2c_booking_cancel_with_default_reason():
         await crm_page.wait_for_timeout(500)
         print("  ✓ 결제 수단: 카드 선택")
 
-        # 매출 저장
-        save_btn = crm_page.locator("button:has-text('매출 저장')").first
+        # 매출 등록
+        save_btn = crm_page.locator("button:has-text('매출 등록')").first
         await expect(save_btn).to_be_visible(timeout=10000)
         await save_btn.click()
         await crm_page.wait_for_load_state("networkidle")
         await crm_page.wait_for_timeout(3000)
-        print("  ✓ 매출 저장 완료")
+        print("  ✓ 매출 등록 완료")
 
         # 매출 등록 완료 확인
         await crm_page.goto(second_detail_url)
@@ -825,12 +825,12 @@ async def test_b2c_booking_cancel_with_default_reason():
                 break
 
         # 내일 날짜로 이동
-        target_day = f"3. {d.day}"
+        target_day = f"{d.month}. {d.day}"
         header = await crm_page.locator("h2.fc-toolbar-title, .fc-toolbar-title").first.text_content()
         for _ in range(10):
             if target_day in header:
                 break
-            current_day = int(re.search(r"3\.\s*(\d+)", header).group(1))
+            current_day = int(re.search(rf"{d.month}\.\s*(\d+)", header).group(1))
             btn_cls = "fc-next-button" if current_day < d.day else "fc-prev-button"
             nav_btn = crm_page.locator(f"button.{btn_cls}").first
             await expect(nav_btn).to_be_visible(timeout=5000)
@@ -896,13 +896,13 @@ async def test_b2c_booking_cancel_with_default_reason():
         await crm_page.wait_for_timeout(500)
         print("  ✓ 결제 수단: 카드 선택")
 
-        # 매출 저장
-        save_sales_btn = crm_page.locator("button:has-text('매출 저장')").first
+        # 매출 등록
+        save_sales_btn = crm_page.locator("button:has-text('매출 등록')").first
         await expect(save_sales_btn).to_be_visible(timeout=10000)
         await save_sales_btn.click()
         await crm_page.wait_for_load_state("networkidle")
         await crm_page.wait_for_timeout(3000)
-        print("  ✓ 매출 저장 완료")
+        print("  ✓ 매출 등록 완료")
 
         # 매출 등록 완료 확인
         await crm_page.goto(confirm_detail_url)
@@ -1161,13 +1161,13 @@ async def test_b2c_booking_cancel_with_default_reason():
         await crm_page.wait_for_timeout(500)
         print("  ✓ 결제 수단: 카드 선택")
 
-        # 매출 저장
-        save_btn_kok = crm_page.locator("button:has-text('매출 저장')").first
+        # 매출 등록
+        save_btn_kok = crm_page.locator("button:has-text('매출 등록')").first
         await expect(save_btn_kok).to_be_visible(timeout=10000)
         await save_btn_kok.click()
         await crm_page.wait_for_load_state("networkidle")
         await crm_page.wait_for_timeout(3000)
-        print("  ✓ 매출 저장 완료")
+        print("  ✓ 매출 등록 완료")
 
         # 매출 등록 완료 확인
         await crm_page.goto(kok_detail_url)

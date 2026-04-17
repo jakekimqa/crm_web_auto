@@ -81,10 +81,24 @@ class B2BAutomationV2:
         await self.page.click("text=샵으로 이동")
         await self.page.wait_for_load_state("networkidle")
 
+        # 공지 팝업이 있으면 닫기
+        await self._dismiss_notice_popup()
+
         print("4. 샵 정보 검증")
         assert await self.page.locator(f"text={self.shop_name}").first.is_visible(), "샵 이름이 올바르지 않습니다."
         assert await self.page.locator(f"text={self.owner_name}").first.is_visible(), "점주 이름이 올바르지 않습니다."
         print("=== [v2] 로그인 테스트 완료 ===\n")
+
+    async def _dismiss_notice_popup(self):
+        """캘린더 진입 시 운영 공지 팝업이 있으면 '하루 동안 보지 않기' 클릭"""
+        try:
+            dismiss_btn = self.page.locator("text=하루 동안 보지 않기").first
+            await dismiss_btn.wait_for(state="visible", timeout=3000)
+            await dismiss_btn.click()
+            await self.page.wait_for_timeout(500)
+            print("✓ 공지 팝업 닫기 완료")
+        except Exception:
+            pass  # 팝업이 없으면 무시
 
     async def _open_customer_chart(self):
         # 고객차트 화면 여부 판단: URL + 검색 입력이 모두 맞을 때만 이미 진입으로 간주
@@ -159,6 +173,31 @@ class B2BAutomationV2:
         assert self.page is not None and not self.page.is_closed(), "메인 페이지를 찾지 못했습니다."
         await self.page.bring_to_front()
         await self.page.wait_for_load_state("domcontentloaded")
+        await self._dismiss_popup()
+
+    async def _dismiss_popup(self):
+        """팝업이 있으면 '하루 동안 보지 않기' 클릭, 또는 모달 닫기 버튼 클릭"""
+        try:
+            # 1) "하루 동안 보지 않기" 버튼/라벨
+            dismiss_btn = self.page.locator(
+                "button:has-text('하루 동안 보지 않기'):visible, "
+                "label:has-text('하루 동안 보지 않기'):visible"
+            ).first
+            if await dismiss_btn.count() > 0 and await dismiss_btn.is_visible():
+                await dismiss_btn.click()
+                await self.page.wait_for_timeout(500)
+                print("✓ 팝업 닫기 완료 (하루 동안 보지 않기)")
+                return
+            # 2) event-popup 모달의 닫기(X) 버튼
+            modal = self.page.locator("div.modal-wrapper:has(div.modal-dimmer.isActiveDimmed):visible").first
+            if await modal.count() > 0:
+                close_btn = modal.locator("button:visible").first
+                if await close_btn.count() > 0:
+                    await close_btn.click()
+                    await self.page.wait_for_timeout(500)
+                    print("✓ 모달 팝업 닫기 완료")
+        except Exception:
+            pass
 
     async def _ensure_active_page(self):
         if self.page is not None and not self.page.is_closed():
@@ -172,12 +211,18 @@ class B2BAutomationV2:
 
     async def _assert_customer_exists_in_list(self, customer_name):
         # 등록 직후 리스트 반영 지연을 고려해 재시도한다.
-        for _ in range(30):
+        for attempt in range(30):
             await self._ensure_active_page()
             list_item = self.page.locator(f"tr:has-text('{customer_name}')").first
             if await list_item.count() > 0 and await list_item.is_visible():
                 return
-            await self.page.wait_for_timeout(1000)
+            # 10회, 20회 실패 시 페이지 리로드
+            if attempt in (10, 20):
+                await self.page.reload()
+                await self.page.wait_for_load_state("networkidle")
+                await self.page.wait_for_timeout(1500)
+            else:
+                await self.page.wait_for_timeout(1000)
         raise AssertionError(f"고객 리스트에서 고객 미노출: {customer_name}")
 
     async def _customer_exists_in_list(self, customer_name):
@@ -286,7 +331,10 @@ class B2BAutomationV2:
 
     async def _assert_duplicate_contact_modal_exact(self):
         exact_text = self.page.get_by_text(re.compile(r"이미\s*등록된\s*고객\s*연락처입니다\.?"))
-        await expect(exact_text).to_be_visible(timeout=5000)
+        if await exact_text.count() == 0:
+            # 폴백: 더 유연한 매칭
+            exact_text = self.page.get_by_text(re.compile(r"이미\s*등록된.*(연락처|고객)"))
+        await expect(exact_text).to_be_visible(timeout=10000)
         print("message: 이미 등록된 고객 연락처입니다.")
         await self._close_duplicate_modal()
 

@@ -39,6 +39,7 @@ async def clean_state(runner):
     base = runner.base_url.replace("/signin", "")
     await runner.page.goto(f"{base}/book/calendar")
     await runner.page.wait_for_load_state("networkidle")
+    await runner._dismiss_popup()
     yield
 
 
