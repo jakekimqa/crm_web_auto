@@ -190,44 +190,50 @@ class ShopActivationRunner(B2BAutomationV2):
         await join_button.click()
         await expect(phone_field).to_be_visible(timeout=10000)
 
+        # 1. 번호 입력
         await phone_field.fill(self.crm_test_phone)
+        print(f"  ✓ 번호 입력: {self.crm_test_phone}")
+
+        # 2. 소개글 입력
         await self.page.get_by_placeholder("샵을 소개할 수 있는 내용을 작성해 주세요.").fill(self.crm_test_intro)
+        print(f"  ✓ 소개글 입력")
+
+        # 3. 샵 소개 이미지 입력 → [저장] → "이미지 등록이 완료되었습니다." → [확인]
         await self._attach_b2c_test_image()
+        img_save_btn = self.page.locator("button.sc-45a967ab-0:not([disabled]):not([type='submit']):has-text('저장')").first
+        await expect(img_save_btn).to_be_visible(timeout=5000)
+        await img_save_btn.click(force=True)
+        await self.page.wait_for_timeout(2000)
+        print("  ✓ 이미지 저장 버튼 클릭")
 
-        deposit_section = self.page.locator(
-            "div:has-text('예약 방식 설정'):visible, section:has-text('예약 방식 설정'):visible"
-        ).first
-        await expect(deposit_section).to_be_visible(timeout=10000)
-        await deposit_section.scroll_into_view_if_needed()
+        # "이미지 등록이 완료되었습니다." 확인 모달 → [확인]
+        confirm_btn = self.page.locator("button:has-text('확인'):visible").first
+        if await confirm_btn.count() > 0:
+            await confirm_btn.click()
+            await self.page.wait_for_timeout(1000)
+            print("  ✓ 이미지 등록 완료 확인")
 
-        # dimmer가 가로막을 수 있으므로 먼저 닫기
-        for _ in range(5):
-            dim = self.page.locator("#modal-dimmer.isActiveDimmed:visible").first
-            if await dim.count() > 0:
-                await dim.click(force=True)
-                await self.page.wait_for_timeout(500)
-            else:
-                break
-
-        without_deposit = self.page.locator("h4:has-text('예약금 없이 예약'):visible").first
-        await expect(without_deposit).to_be_visible(timeout=10000)
-        await without_deposit.scroll_into_view_if_needed()
+        # 4. 예약금 없이 예약 클릭
+        no_deposit = self.page.locator("h4:has-text('예약금 없이 예약')").first
+        await expect(no_deposit).to_be_visible(timeout=10000)
+        await no_deposit.scroll_into_view_if_needed()
         await self.page.wait_for_timeout(500)
-        await without_deposit.click(force=True)
+        await no_deposit.click(force=True)
         await self.page.wait_for_timeout(1000)
+        print("  ✓ 예약금 없이 예약 선택")
 
-        reservation_mode_text = re.sub(r"\s+", " ", await self.page.locator("body").inner_text())
-        assert "예약금 없이 예약" in reservation_mode_text, "예약 방식 설정에서 '예약금 없이 예약' 텍스트 확인 실패"
-
-        save_button = self.page.locator("button[data-track-id='b2c_info_save']")
-        if await save_button.count() == 0:
-            save_button = self.page.locator("button:has-text('저장'):visible").last
-        await expect(save_button).to_be_enabled(timeout=10000)
-        await save_button.click()
+        # 5. 최종 저장 (data-track-id="b2c_info_save")
+        final_save = self.page.locator("button[data-track-id='b2c_info_save']")
+        await expect(final_save).to_be_enabled(timeout=10000)
+        await final_save.click()
         await self.page.wait_for_load_state("networkidle")
-        await self.page.wait_for_timeout(1000)
+        await self.page.wait_for_timeout(2000)
+        print("  ✓ 최종 저장 완료")
 
-        assert await self._is_b2c_toggle_on(), "공비서로 온라인 예약받기 토글이 ON 상태가 아닙니다."
+        # 6. "카카오 알림톡 무료 사용 중" 텍스트 확인
+        kakao_text = self.page.locator("p:has-text('카카오 알림톡 무료 사용 중')").first
+        await expect(kakao_text).to_be_visible(timeout=10000)
+        print("  ✓ 카카오 알림톡 무료 사용 중 확인")
 
 
 async def _crm_login(page):

@@ -7,7 +7,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 from playwright.async_api import async_playwright, expect
 
-CRM_BASE_URL = os.getenv("CRM_BASE_URL", "https://crm-dev5.gongbiz.kr")
+CRM_BASE_URL = os.getenv("CRM_BASE_URL", "https://gongbiz.kr")
 SHOT_DIR = Path("qa_artifacts/screenshots")
 SHOT_DIR.mkdir(parents=True, exist_ok=True)
 IMG_DIR = Path("qa_artifacts/kok_register_images")
@@ -50,14 +50,14 @@ async def main():
 
     # ── 로그인 ──
     await page.goto(f"{CRM_BASE_URL}/signin")
-    await page.fill('input[name="id"], input[type="text"]', "autoqatest1")
+    await page.fill('input[name="id"], input[type="text"]', "herrenail")
     await page.fill('input[name="password"], input[type="password"]', "gong2023@@")
     await page.click('button[type="submit"]')
     await page.wait_for_load_state("networkidle")
     await page.wait_for_timeout(1500)
 
     # 최근 생성 샵 선택 → 해당 행의 "샵으로 이동" 클릭
-    shop_name = "0411_1135_배포_테스트"
+    shop_name = "ㅎㅔㄹㅔㄴ_B2C_테스트"
     shop_row = page.locator(f"tr.item:has-text('{shop_name}')").first
     await expect(shop_row).to_be_visible(timeout=10000)
     move_btn = shop_row.locator("a:has-text('샵으로 이동'), span:has-text('샵으로 이동')").first
@@ -501,12 +501,7 @@ async def main():
         await preview_edit_btn.click()
     edit_b2c = await edit_page_info.value
     await edit_b2c.wait_for_load_state("networkidle")
-    original_edit_url = edit_b2c.url
-    if "dev-front-zero.gongbiz.kr" in original_edit_url:
-        cok_id = original_edit_url.rstrip("/").split("/")[-1]
-        qa_url = f"https://qa-zero.gongbiz.kr/cok/{cok_id}"
-        await edit_b2c.goto(qa_url)
-        await edit_b2c.wait_for_load_state("networkidle")
+    await edit_b2c.wait_for_load_state("networkidle")
     await edit_b2c.wait_for_timeout(2000)
     print(f"  ✓ 미리보기 페이지 열림: {edit_b2c.url}")
     await edit_b2c.screenshot(path=str(SHOT_DIR / "kok_edit_a_preview_01.png"))
@@ -602,13 +597,6 @@ async def main():
             await preview_btn.click()
         b2c_page = await new_page_info.value
         await b2c_page.wait_for_load_state("networkidle")
-        # dev-front-zero → qa-zero로 리다이렉트
-        original_url = b2c_page.url
-        if "dev-front-zero.gongbiz.kr" in original_url:
-            cok_id = original_url.rstrip("/").split("/")[-1]
-            qa_url = f"https://qa-zero.gongbiz.kr/cok/{cok_id}"
-            await b2c_page.goto(qa_url)
-            await b2c_page.wait_for_load_state("networkidle")
         await b2c_page.wait_for_timeout(2000)
         print(f"  ✓ 미리보기 페이지 열림: {b2c_page.url}")
         await b2c_page.screenshot(path=str(SHOT_DIR / f"{shot_prefix}_01.png"))
@@ -908,7 +896,7 @@ async def main():
             "duration": "1시간 30분",
             "keywords": ["테스트", "자동화", "수정"],
         },
-        designer_name="샵주테스트",
+        designer_name="공비서",
         shot_prefix="kok_preview_a",
     )
 
@@ -925,7 +913,7 @@ async def main():
             "duration": "1시간",
             "keywords": [],
         },
-        designer_name="테스트_직원계정1",
+        designer_name="직원제크",
         shot_prefix="kok_preview_b",
         test_report=True,
     )
@@ -1037,8 +1025,61 @@ async def main():
         if "[콕예약]" in detail_text:
             print("  ✓ 고객 요청사항에 [콕예약] 확인")
 
+        # 예약 대기 상태면 먼저 예약 확정
+        confirm_btn = crm_page.locator("button:has-text('예약 확정')").first
+        if await confirm_btn.count() > 0 and await confirm_btn.is_visible():
+            await confirm_btn.click()
+            await crm_page.wait_for_load_state("networkidle")
+            await crm_page.wait_for_timeout(2000)
+            print("  ✓ 예약 확정 완료")
+            # 확정 후 다시 예약 블록 클릭
+            await crm_page.goto(f"{base}/book/calendar")
+            await crm_page.wait_for_load_state("networkidle")
+            await crm_page.wait_for_timeout(2000)
+            for name in ["일", "날짜별"]:
+                btn = crm_page.get_by_role("button", name=name).first
+                if await btn.count() > 0 and await btn.is_visible():
+                    await btn.click()
+                    await crm_page.wait_for_load_state("networkidle")
+                    await crm_page.wait_for_timeout(1500)
+                    break
+            d = tomorrow
+            header = await crm_page.locator("h2.fc-toolbar-title, .fc-toolbar-title").first.text_content()
+            for _ in range(10):
+                if f"{d.day}" in header:
+                    break
+                current_match = re.search(r"(\d+)\.\s*(\d+)", header)
+                if current_match:
+                    current_day = int(current_match.group(2))
+                    btn_cls = "fc-next-button" if current_day < d.day else "fc-prev-button"
+                else:
+                    btn_cls = "fc-next-button"
+                nav_btn = crm_page.locator(f"button.{btn_cls}").first
+                await nav_btn.click()
+                await crm_page.wait_for_load_state("networkidle")
+                await crm_page.wait_for_timeout(1500)
+                header = await crm_page.locator("h2.fc-toolbar-title, .fc-toolbar-title").first.text_content()
+            resource_id2 = await crm_page.evaluate("""(designerName) => {
+                const headers = document.querySelectorAll('th[data-resource-id]');
+                for (const th of headers) {
+                    if (th.textContent.includes(designerName)) return th.getAttribute('data-resource-id');
+                }
+                return null;
+            }""", designer)
+            if resource_id2:
+                col_blocks2 = crm_page.locator(f"td[data-resource-id='{resource_id2}'] div.booking-normal")
+                for i in range(await col_blocks2.count()):
+                    block2 = col_blocks2.nth(i)
+                    if kok_name in await block2.inner_text():
+                        await block2.click(force=True)
+                        break
+            await crm_page.wait_for_timeout(3000)
+            await crm_page.wait_for_load_state("networkidle")
+
         # 매출 등록 버튼 클릭
-        sales_btn = crm_page.locator("h4:has-text('매출 등록'), button:has-text('매출 등록')").first
+        sales_btn = crm_page.locator("h4:has-text('매출 등록'), button:has-text('매출 등록'), a:has-text('매출 등록')").first
+        if await sales_btn.count() == 0:
+            sales_btn = crm_page.locator("text=매출 등록").first
         await expect(sales_btn).to_be_visible(timeout=10000)
         await sales_btn.click()
         await crm_page.wait_for_load_state("networkidle")
@@ -1127,16 +1168,16 @@ async def main():
     sales_body = await page.locator("body").inner_text()
 
     # 콕예약 A 검증: 담당자=샵주테스트, 판매상품=E2E 테스트 콕예약 A_수정, 실매출=70,000
-    assert "샵주테스트" in sales_body, "매출 목록에서 담당자 '샵주테스트' 미발견"
+    assert "공비서" in sales_body, "매출 목록에서 담당자 '공비서' 미발견"
     assert "E2E 테스트 콕예약 A_수정" in sales_body, "매출 목록에서 'E2E 테스트 콕예약 A_수정' 미발견"
     assert "70,000" in sales_body, "매출 목록에서 실매출 '70,000' 미발견"
-    print("  ✓ 콕예약 A 매출 확인: 담당자=샵주테스트, 판매상품=E2E 테스트 콕예약 A_수정, 실매출=70,000원")
+    print("  ✓ 콕예약 A 매출 확인: 담당자=공비서, 판매상품=E2E 테스트 콕예약 A_수정, 실매출=70,000원")
 
-    # 콕예약 B 검증: 담당자=테스트_직원계정1, 판매상품=E2E 테스트 콕예약 B, 실매출=70,000
-    assert "테스트_직원계정1" in sales_body, "매출 목록에서 담당자 '테스트_직원계정1' 미발견"
+    # 콕예약 B 검증: 담당자=직원제크, 판매상품=E2E 테스트 콕예약 B, 실매출=70,000
+    assert "직원제크" in sales_body, "매출 목록에서 담당자 '직원제크' 미발견"
     assert "E2E 테스트 콕예약 B" in sales_body, "매출 목록에서 'E2E 테스트 콕예약 B' 미발견"
     assert "70,000" in sales_body, "매출 목록에서 실매출 '70,000' 미발견"
-    print("  ✓ 콕예약 B 매출 확인: 담당자=테스트_직원계정1, 판매상품=E2E 테스트 콕예약 B, 실매출=70,000원")
+    print("  ✓ 콕예약 B 매출 확인: 담당자=직원제크, 판매상품=E2E 테스트 콕예약 B, 실매출=70,000원")
 
     await page.screenshot(path=str(SHOT_DIR / "kok_sales_verified.png"))
     print("  ✓ 매출 페이지 검증 완료 (2건)")
