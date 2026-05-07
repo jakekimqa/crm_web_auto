@@ -3,8 +3,12 @@
 import asyncio
 import os
 import re
+from pathlib import Path
 
 from playwright.async_api import expect
+
+_ASSETS_DIR = Path(__file__).resolve().parent.parent.parent / "test_assets"
+_PHOTO_PATHS_10 = [str(_ASSETS_DIR / f"test_photo_10MB_{i}.jpg") for i in range(1, 11)]
 
 
 class SalesMixin:
@@ -270,15 +274,6 @@ class SalesMixin:
         await self._open_sales_registration_from_calendar(customer)
         await self._assert_sales_registration_page(expected_total="20,000원")
 
-        # 사진 업로드 (0.5~4.9MB, 10장)
-        asset_dir = os.path.join(os.path.dirname(__file__), "..", "..", "test_assets")
-        photo_paths = [
-            os.path.abspath(os.path.join(asset_dir, f"test_photo_{s}.jpg"))
-            for s in ["0_5MB", "1_0MB", "1_5MB", "2_0MB", "2_5MB",
-                       "3_0MB", "3_5MB", "4_0MB", "4_5MB", "4_9MB"]
-        ]
-        await self._upload_sales_photos(photo_paths)
-
         membership_input = self.page.locator('input[name="정액권($membership원)"]').nth(1)
         await membership_input.click()
         await membership_input.fill("21000")
@@ -288,6 +283,7 @@ class SalesMixin:
 
         await membership_input.click()
         await membership_input.fill("20000")
+        await self._upload_sales_photos(_PHOTO_PATHS_10)
         await self._click_sales_save_button()
         print("✓ 매출 등록 1 완료")
 
@@ -324,21 +320,13 @@ class SalesMixin:
         await self._open_sales_registration_from_calendar(customer)
         await self._assert_sales_registration_page(expected_total="10,000원")
 
-        # 사진 업로드 (0.5~4.9MB, 10장)
-        asset_dir = os.path.join(os.path.dirname(__file__), "..", "..", "test_assets")
-        photo_paths = [
-            os.path.abspath(os.path.join(asset_dir, f"test_photo_{s}.jpg"))
-            for s in ["0_5MB", "1_0MB", "1_5MB", "2_0MB", "2_5MB",
-                       "3_0MB", "3_5MB", "4_0MB", "4_5MB", "4_9MB"]
-        ]
-        await self._upload_sales_photos(photo_paths)
-
         insert_cash = self.page.locator('input[name="현금"]').nth(1)
         await insert_cash.click()
         await insert_cash.fill("5000")
         insert_card = self.page.locator('input[name="카드"]').nth(1)
         await insert_card.click()
         await insert_card.fill("5000")
+        await self._upload_sales_photos(_PHOTO_PATHS_10)
         await self._click_sales_save_button()
         print("✓ 매출 등록 3 완료")
 
@@ -455,17 +443,9 @@ class SalesMixin:
         amount = re.sub(r"[^\d]", "", total_text)
         await membership_input.click()
         await membership_input.fill(amount)
-
-        # 사진 업로드 (10MB x 10장)
-        asset_dir = os.path.join(os.path.dirname(__file__), "..", "..", "test_assets")
-        photo_paths = [
-            os.path.abspath(os.path.join(asset_dir, f"test_photo_10MB_{i}.jpg"))
-            for i in range(1, 11)
-        ]
-        await self._upload_sales_photos(photo_paths)
-
+        await self._upload_sales_photos(_PHOTO_PATHS_10)
         await self._click_sales_save_button()
-        print(f"✓ 매출 등록 5 완료 (패밀리 공유 정액권 {amount}원, 10MB 사진 10장)")
+        print(f"✓ 매출 등록 5 완료 (패밀리 공유 정액권 {amount}원)")
 
     async def custom_payment_method(self, customer_name=None):
         """커스텀 결제수단 추가 → 매출 등록 → 통계 검증 → 매출 삭제 → 결제수단 삭제"""

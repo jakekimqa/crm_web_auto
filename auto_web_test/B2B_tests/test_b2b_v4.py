@@ -354,6 +354,7 @@ async def test_staff_statistics_product_type(runner):
         "차감 합계": 50000,
         "정액권 차감": 30000,
         "티켓 차감": 20000,
+        "포인트 차감": 0,
         "총 합계": 370000,
     }
 

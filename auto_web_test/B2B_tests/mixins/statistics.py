@@ -94,6 +94,12 @@ class StatisticsMixin:
                 for (const t of titleNodes) {
                     let box = t;
                     for (let i = 0; i < 8 && box; i += 1, box = box.parentElement) {
+                        // 새 UI: 카드 자체가 button/a (자세히 보기 없음)
+                        if ((box.tagName === 'BUTTON' || box.tagName === 'A') && visible(box)) {
+                            box.click();
+                            return true;
+                        }
+                        // 기존 UI: 자세히 보기 버튼
                         const btns = [...box.querySelectorAll('button,a')]
                             .filter((el) => visible(el) && norm(el.innerText).includes('자세히 보기'));
                         if (btns.length > 0) {
@@ -106,7 +112,7 @@ class StatisticsMixin:
             }""",
             card_title,
         )
-        assert clicked, f"'{card_title} 카드의 자세히 보기 클릭 실패"
+        assert clicked, f"'{card_title}' 카드 클릭 실패"
         await self.page.wait_for_load_state("domcontentloaded")
         await self.page.wait_for_timeout(700)
 
@@ -124,18 +130,32 @@ class StatisticsMixin:
         await range_btn.click()
         await self.page.wait_for_timeout(500)
 
+        # 날짜 팝업 내 "오늘" 프리셋 버튼 (h4 포함 버튼 우선)
         today_btn = self.page.locator(
             "button:has(h4:has-text('오늘')):visible"
         ).first
+        if await today_btn.count() == 0:
+            # 팝업 내 프리셋 목록에서 "오늘" 텍스트만 가진 버튼 찾기
+            today_candidates = self.page.locator("button:visible").filter(has_text=re.compile(r"^오늘$"))
+            for i in range(await today_candidates.count()):
+                btn = today_candidates.nth(i)
+                # 기간 검색 버튼 근처(팝업 영역)에 있는 버튼인지 확인
+                in_popup = await btn.evaluate(
+                    "el => { let p = el; for (let i = 0; i < 10 && p; i++, p = p.parentElement) "
+                    "{ if (p.querySelector && p.querySelector(\"button[class*='기간'], h4\")) return true; } return false; }"
+                )
+                if in_popup:
+                    today_btn = btn
+                    break
         if await today_btn.count() == 0:
             today_btn = self.page.get_by_role("button", name="오늘").locator(":visible").first
         await expect(today_btn).to_be_visible(timeout=3000)
         await today_btn.click()
         await self.page.wait_for_timeout(300)
 
-        search_btn = self.page.get_by_role("button", name=re.compile(r"기간 검색$")).locator(":visible").first
+        search_btn = self.page.locator("button:has-text('기간 검색'):visible").last
         if await search_btn.count() == 0:
-            search_btn = self.page.locator("button:has-text('기간 검색'):visible").last
+            search_btn = self.page.get_by_role("button", name=re.compile(r"기간 검색$")).locator(":visible").first
         if await search_btn.count() == 0:
             search_btn = self.page.get_by_text("기간 검색", exact=False).locator(":visible").last
         await expect(search_btn).to_be_visible(timeout=3000)
