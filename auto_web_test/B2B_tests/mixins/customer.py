@@ -69,6 +69,13 @@ class CustomerMixin:
 
     async def _assert_customer_exists_in_list(self, customer_name):
         # 등록 직후 리스트 반영 지연을 고려해 재시도한다.
+        # 모달/dimmer가 남아있으면 먼저 닫기
+        for _ in range(5):
+            if await self.page.locator("#customer-name:visible").count() == 0:
+                break
+            await self.page.keyboard.press("Escape")
+            await self.page.wait_for_timeout(500)
+
         for attempt in range(30):
             await self._ensure_active_page()
             list_item = self.page.locator(f"tr:has-text('{customer_name}')").first
@@ -163,7 +170,19 @@ class CustomerMixin:
 
             reg_btn = self.page.locator("button:has-text('고객 등록'):visible").last
             await expect(reg_btn).to_be_enabled(timeout=5000)
-            await reg_btn.click()
+            await reg_btn.scroll_into_view_if_needed()
+            await self.page.wait_for_timeout(300)
+
+            # 클릭 후 모달 닫힘 확인, 안 닫히면 재시도
+            for click_attempt in range(3):
+                await reg_btn.click()
+                await self.page.wait_for_timeout(1500)
+                if await self.page.locator("#customer-name:visible").count() == 0:
+                    break
+                print(f"  [RETRY] 등록 클릭 {click_attempt + 1}회 - 모달 미닫힘, 재시도")
+                await reg_btn.scroll_into_view_if_needed()
+                await self.page.wait_for_timeout(500)
+
             await self.page.wait_for_load_state("networkidle")
             await self._ensure_active_page()
             await self.page.wait_for_timeout(2000)
