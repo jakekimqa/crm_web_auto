@@ -10,6 +10,15 @@ from playwright.async_api import expect
 _ASSETS_DIR = Path(__file__).resolve().parent.parent.parent / "test_assets"
 _PHOTO_PATHS_10 = [str(_ASSETS_DIR / f"test_photo_10MB_{i}.jpg") for i in range(1, 11)]
 
+# 경량 사진 세트 (0.5~4.9MB 기존 파일 활용)
+_SMALL_SIZES = ["0_5MB", "1_0MB", "1_5MB"]
+_MIXED_SIZES = ["0_5MB", "1_0MB", "1_5MB", "2_0MB", "2_5MB", "3_0MB", "3_5MB", "4_0MB", "4_5MB", "4_9mb"]
+_LARGE_SIZES = ["3_0MB", "3_5MB", "4_0MB", "4_5MB", "4_9mb"]
+
+_PHOTO_PATHS_SMALL = [str(_ASSETS_DIR / f"test_photo_{s}.jpg") for s in (_SMALL_SIZES * 4)[:10]]
+_PHOTO_PATHS_MIXED = [str(_ASSETS_DIR / f"test_photo_{s}.jpg") for s in _MIXED_SIZES]
+_PHOTO_PATHS_LARGE = [str(_ASSETS_DIR / f"test_photo_{s}.jpg") for s in (_LARGE_SIZES * 2)]
+
 
 class SalesMixin:
     async def _upload_sales_photos(self, photo_paths):
@@ -282,7 +291,7 @@ class SalesMixin:
 
         await membership_input.click()
         await membership_input.fill("20000")
-        await self._upload_sales_photos(_PHOTO_PATHS_10)
+        await self._upload_sales_photos(_PHOTO_PATHS_SMALL)
         await self._click_sales_save_button()
         print("✓ 매출 등록 1 완료")
 
@@ -325,7 +334,7 @@ class SalesMixin:
         insert_card = self.page.locator('input[name="카드"]').nth(1)
         await insert_card.click()
         await insert_card.fill("5000")
-        await self._upload_sales_photos(_PHOTO_PATHS_10)
+        await self._upload_sales_photos(_PHOTO_PATHS_MIXED)
         await self._click_sales_save_button()
         print("✓ 매출 등록 3 완료")
 
@@ -442,7 +451,7 @@ class SalesMixin:
         amount = re.sub(r"[^\d]", "", total_text)
         await membership_input.click()
         await membership_input.fill(amount)
-        await self._upload_sales_photos(_PHOTO_PATHS_10)
+        await self._upload_sales_photos(_PHOTO_PATHS_LARGE)
         await self._click_sales_save_button()
         print(f"✓ 매출 등록 5 완료 (패밀리 공유 정액권 {amount}원)")
 
