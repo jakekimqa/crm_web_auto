@@ -29,12 +29,11 @@ class SalesMixin:
             await add_btn.click()
         file_chooser = await fc_info.value
         await file_chooser.set_files(photo_paths)
-        await self.page.wait_for_timeout(3000)
         print(f"  ✓ 사진 {len(photo_paths)}장 일괄 업로드")
 
         # 저장 버튼 클릭
         save_btn = self.page.locator("button:has-text('저장'):visible").first
-        await expect(save_btn).to_be_enabled(timeout=30000)
+        await expect(save_btn).to_be_enabled(timeout=15000)
         await save_btn.click()
         await self.page.wait_for_timeout(1000)
 
