@@ -136,7 +136,10 @@ class ReservationMixin:
             await self.page.wait_for_timeout(300)
 
             await self.page.locator("button:has-text('등록'):visible").first.click()
-            await self.page.wait_for_load_state("networkidle")
+            try:
+                await self.page.wait_for_load_state("networkidle", timeout=10000)
+            except Exception:
+                pass
             try:
                 await self.page.wait_for_selector("#modal-dimmer.isActiveDimmed", state="hidden", timeout=5000)
             except Exception:
@@ -205,7 +208,7 @@ class ReservationMixin:
                     await self.page.keyboard.press("Escape")
                 await self.page.wait_for_timeout(500)
                 try:
-                    await self.page.wait_for_load_state("networkidle")
+                    await self.page.wait_for_load_state("networkidle", timeout=10000)
                     still_open = self.page.locator("div:has(button:has-text('나가기'))").filter(has_text=r["customer"]).first
                     if await still_open.count() == 0 or not await still_open.is_visible():
                         closed = True
@@ -258,7 +261,10 @@ class ReservationMixin:
         register_btn = self.page.locator("button:has-text('등록'):visible").first
         await expect(register_btn).to_be_visible(timeout=3000)
         await register_btn.click()
-        await self.page.wait_for_load_state("networkidle")
+        try:
+            await self.page.wait_for_load_state("networkidle", timeout=10000)
+        except Exception:
+            pass
         await self.page.wait_for_timeout(1000)
 
         try:
@@ -327,7 +333,10 @@ class ReservationMixin:
         register_btn = self.page.locator("button:has-text('등록'):visible").first
         await expect(register_btn).to_be_visible(timeout=3000)
         await register_btn.click()
-        await self.page.wait_for_load_state("networkidle")
+        try:
+            await self.page.wait_for_load_state("networkidle", timeout=10000)
+        except Exception:
+            pass
         await self.page.wait_for_timeout(1000)
 
         try:
@@ -391,7 +400,10 @@ class ReservationMixin:
         print("=== 단일 예약막기 삭제 시작 ===")
         base = self.base_url.replace("/signin", "")
         await self.page.goto(f"{base}/book/calendar")
-        await self.page.wait_for_load_state("networkidle")
+        try:
+            await self.page.wait_for_load_state("networkidle", timeout=10000)
+        except Exception:
+            pass
         await self._move_calendar_to_today()
         await self.page.locator("button:has-text('일'):visible").first.click()
         await self.page.wait_for_timeout(500)
@@ -409,7 +421,10 @@ class ReservationMixin:
         self.page.once("dialog", lambda dialog: asyncio.ensure_future(dialog.accept()))
         await confirm_btn.click()
         await self.page.wait_for_timeout(1000)
-        await self.page.wait_for_load_state("networkidle")
+        try:
+            await self.page.wait_for_load_state("networkidle", timeout=10000)
+        except Exception:
+            pass
 
         print("✓ 단일 예약막기 삭제 완료")
         print("=== 단일 예약막기 삭제 완료 ===\n")
@@ -419,7 +434,10 @@ class ReservationMixin:
         print("=== 반복 예약막기 삭제 시작 ===")
         base = self.base_url.replace("/signin", "")
         await self.page.goto(f"{base}/book/calendar")
-        await self.page.wait_for_load_state("networkidle")
+        try:
+            await self.page.wait_for_load_state("networkidle", timeout=10000)
+        except Exception:
+            pass
         await self._move_calendar_to_today()
         await self.page.locator("button:has-text('일'):visible").first.click()
         await self.page.wait_for_timeout(500)
@@ -440,7 +458,10 @@ class ReservationMixin:
         self.page.once("dialog", lambda dialog: asyncio.ensure_future(dialog.accept()))
         await modal_delete_btn.click()
         await self.page.wait_for_timeout(1000)
-        await self.page.wait_for_load_state("networkidle")
+        try:
+            await self.page.wait_for_load_state("networkidle", timeout=10000)
+        except Exception:
+            pass
 
         print("✓ 반복 예약막기 삭제 완료 (모든 일정)")
         print("=== 반복 예약막기 삭제 완료 ===\n")

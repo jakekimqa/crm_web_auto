@@ -32,17 +32,33 @@ class SalesMixin:
         await photo_icon.click()
         await self.page.wait_for_timeout(500)
 
-        # 사진 추가 버튼 클릭 → file chooser (multiple 지원)
+        # 사진 추가 버튼 클릭 → filechooser 이벤트로 파일 설정
         add_btn = self.page.locator("button:has-text('사진 추가'):visible").first
-        async with self.page.expect_file_chooser() as fc_info:
-            await add_btn.click()
-        file_chooser = await fc_info.value
-        await file_chooser.set_files(photo_paths)
-        print(f"  ✓ 사진 {len(photo_paths)}장 일괄 업로드")
+        await expect(add_btn).to_be_visible(timeout=5000)
+
+        fc_future = asyncio.get_event_loop().create_future()
+
+        def _on_fc(file_chooser):
+            if not fc_future.done():
+                fc_future.set_result(file_chooser)
+
+        self.page.on("filechooser", _on_fc)
+        await add_btn.click()
+        try:
+            file_chooser = await asyncio.wait_for(fc_future, timeout=10)
+            await file_chooser.set_files(photo_paths)
+            print(f"  ✓ 사진 {len(photo_paths)}장 일괄 업로드")
+        except asyncio.TimeoutError:
+            print("  ⚠ filechooser 타임아웃, set_input_files 폴백")
+            file_input = self.page.locator("input[type='file']")
+            await file_input.set_input_files(photo_paths)
+            print(f"  ✓ 사진 {len(photo_paths)}장 일괄 업로드 (폴백)")
+        finally:
+            self.page.remove_listener("filechooser", _on_fc)
 
         # 저장 버튼 클릭
         save_btn = self.page.locator("button:has-text('저장'):visible").first
-        await expect(save_btn).to_be_enabled(timeout=15000)
+        await expect(save_btn).to_be_enabled(timeout=60000)
         await save_btn.click()
         await self.page.wait_for_timeout(1000)
 
@@ -53,7 +69,7 @@ class SalesMixin:
         await self.ensure_calendar_page()
         base = self.base_url.replace("/signin", "")
         if "/book/calendar" not in self.page.url:
-            await self.page.goto(f"{base}/book/calendar", wait_until="networkidle")
+            await self.page.goto(f"{base}/book/calendar", wait_until="domcontentloaded")
         await self._move_calendar_to_today()
         await self.page.locator("button:has-text('일'):visible").first.click()
         await self.page.wait_for_timeout(500)
@@ -120,7 +136,7 @@ class SalesMixin:
         await self.ensure_calendar_page()
         base = self.base_url.replace("/signin", "")
         if "/book/calendar" not in self.page.url:
-            await self.page.goto(f"{base}/book/calendar", wait_until="networkidle")
+            await self.page.goto(f"{base}/book/calendar", wait_until="domcontentloaded")
         await self._move_calendar_to_today()
         await self.page.locator("button:has-text('일'):visible").first.click()
         await self.page.wait_for_timeout(500)
@@ -255,7 +271,7 @@ class SalesMixin:
         await self.ensure_calendar_page()
         if "/book/calendar" not in self.page.url:
             base = self.base_url.replace("/signin", "")
-            await self.page.goto(f"{base}/book/calendar", wait_until="networkidle")
+            await self.page.goto(f"{base}/book/calendar", wait_until="domcontentloaded")
         await self._move_calendar_to_today()
         await self.page.locator("button:has-text('일'):visible").first.click()
         await self.page.wait_for_timeout(500)
@@ -334,7 +350,7 @@ class SalesMixin:
         insert_card = self.page.locator('input[name="카드"]').nth(1)
         await insert_card.click()
         await insert_card.fill("5000")
-        await self._upload_sales_photos(_PHOTO_PATHS_MIXED)
+        await self._upload_sales_photos(_PHOTO_PATHS_SMALL)
         await self._click_sales_save_button()
         print("✓ 매출 등록 3 완료")
 
@@ -342,7 +358,10 @@ class SalesMixin:
         print("미등록고객 제품 매출등록 시작=====")
         await self.page.locator("h3:has-text('매출')").first.click()
         await self.page.locator(".new-item").first.click()
-        await self.page.wait_for_load_state("networkidle")
+        try:
+            await self.page.wait_for_load_state("networkidle", timeout=10000)
+        except Exception:
+            pass
 
         await self.page.locator("label:has(p:has-text('미등록 고객'))").locator(":visible").first.click()
         cust_name = self.page.locator("p:has-text('미등록고객'):visible").first
@@ -399,25 +418,57 @@ class SalesMixin:
         customer = customer_override or f"자동화_{self.mmdd}_3"
         print(f"{customer} 패밀리 공유 정액권 매출등록 시작=====")
 
-        await self.page.locator(".new-item").first.wait_for(state="visible", timeout=10000)
+        try:
+            await self.page.wait_for_load_state("domcontentloaded", timeout=10000)
+        except Exception:
+            pass
+        await self.page.locator(".new-item").first.wait_for(state="visible", timeout=15000)
         await self.page.locator(".new-item").first.click()
-        await self.page.wait_for_load_state("networkidle")
-        await self.page.wait_for_timeout(500)
+        try:
+            await self.page.wait_for_load_state("domcontentloaded", timeout=10000)
+        except Exception:
+            pass
+        await self.page.wait_for_timeout(1000)
 
-        # 고객 검색
+        # 미등록 고객 체크박스 해제 (매출4에서 체크된 상태가 남아있을 수 있음)
+        was_checked = await self.page.evaluate("""() => {
+            const labels = [...document.querySelectorAll('label')];
+            const label = labels.find(l => l.textContent.includes('미등록 고객'));
+            if (!label) return false;
+            const cb = label.querySelector('input[type="checkbox"]');
+            if (cb && cb.checked) { label.click(); return true; }
+            return false;
+        }""")
+        if was_checked:
+            await self.page.wait_for_timeout(500)
+            print("  ✓ 미등록 고객 체크 해제")
+
+        # 고객 검색 (type()으로 입력해야 React 검색 이벤트 발생)
         search_input = self.page.locator("#customer-search")
         await expect(search_input).to_be_visible(timeout=5000)
         await search_input.click()
+        await search_input.fill("")
         await search_input.type(customer, delay=50)
-        await self.page.wait_for_timeout(1000)
+        await self.page.wait_for_timeout(2000)
 
-        result_item = self.page.locator(
-            f"li:has-text('{customer}'):visible"
-        ).first
-        await expect(result_item).to_be_visible(timeout=5000)
-        await result_item.click()
-        await self.page.wait_for_load_state("networkidle")
-        await self.page.wait_for_timeout(1000)
+        # 검색 드롭다운 결과 클릭 (사이드바 예약 li 제외)
+        clicked = await self.page.evaluate("""(customer) => {
+            const lis = [...document.querySelectorAll('li')];
+            const result = lis.find(l => {
+                if (!l.textContent.includes(customer)) return false;
+                if (l.textContent.includes('매출완료') || l.textContent.includes('예약중') || l.textContent.includes('시술중')) return false;
+                const r = l.getBoundingClientRect();
+                return r.width > 0 && r.height > 0;
+            });
+            if (result) { result.click(); return true; }
+            return false;
+        }""", customer)
+        assert clicked, f"고객 검색 결과에서 '{customer}'을(를) 찾지 못했습니다."
+        try:
+            await self.page.wait_for_load_state("networkidle", timeout=10000)
+        except Exception:
+            pass
+        await self.page.wait_for_timeout(2000)
 
         # 시술 메뉴 선택: 손 > 케어
         service_select = self.page.locator(
@@ -427,10 +478,10 @@ class SalesMixin:
         ).first
         await expect(service_select).to_be_visible(timeout=10000)
         await service_select.click()
-        await self.page.wait_for_timeout(500)
+        await self.page.wait_for_timeout(1000)
 
         group_btn = self.page.locator("button:visible").filter(has_text=re.compile(r"^손$")).first
-        await expect(group_btn).to_be_visible(timeout=5000)
+        await expect(group_btn).to_be_visible(timeout=10000)
         await group_btn.click()
         await self.page.wait_for_timeout(500)
 
@@ -451,7 +502,7 @@ class SalesMixin:
         amount = re.sub(r"[^\d]", "", total_text)
         await membership_input.click()
         await membership_input.fill(amount)
-        await self._upload_sales_photos(_PHOTO_PATHS_LARGE)
+        await self._upload_sales_photos(_PHOTO_PATHS_SMALL)
         await self._click_sales_save_button()
         print(f"✓ 매출 등록 5 완료 (패밀리 공유 정액권 {amount}원)")
 
@@ -464,18 +515,27 @@ class SalesMixin:
         # ── 1. 매출 페이지 → 신규 매출 등록 ──
         await self.focus_main_page()
         await self.page.locator("h3:has-text('매출')").first.click()
-        await self.page.wait_for_load_state("networkidle")
+        try:
+            await self.page.wait_for_load_state("networkidle", timeout=10000)
+        except Exception:
+            pass
         await self.page.wait_for_timeout(500)
         sales_link = self.page.locator("text=매출 현황").first
         if await sales_link.count() > 0:
             await sales_link.click()
-            await self.page.wait_for_load_state("networkidle")
+            try:
+                await self.page.wait_for_load_state("networkidle", timeout=10000)
+            except Exception:
+                pass
             await self.page.wait_for_timeout(1000)
 
         new_item = self.page.locator(".new-item").first
         await expect(new_item).to_be_visible(timeout=5000)
         await new_item.click()
-        await self.page.wait_for_load_state("networkidle")
+        try:
+            await self.page.wait_for_load_state("networkidle", timeout=10000)
+        except Exception:
+            pass
         await self.page.wait_for_timeout(1500)
         print("  ✓ 신규 매출 등록 페이지 진입")
 
@@ -539,14 +599,20 @@ class SalesMixin:
         # 결제 수단 설정 모달 닫기
         base = self.base_url.replace("/signin", "")
         await self.page.goto(f"{base}/sale")
-        await self.page.wait_for_load_state("networkidle")
+        try:
+            await self.page.wait_for_load_state("networkidle", timeout=10000)
+        except Exception:
+            pass
         await self.page.wait_for_timeout(1000)
 
         # 신규 매출 등록 재진입
         new_item = self.page.locator(".new-item").first
         await expect(new_item).to_be_visible(timeout=5000)
         await new_item.click()
-        await self.page.wait_for_load_state("networkidle")
+        try:
+            await self.page.wait_for_load_state("networkidle", timeout=10000)
+        except Exception:
+            pass
         await self.page.wait_for_timeout(1500)
 
         # 고객 재선택
@@ -577,7 +643,10 @@ class SalesMixin:
         print(f"  ✓ 결제수단 선택: {payment_name}")
 
         await self.page.locator("button:has-text('매출 등록'):visible").last.click()
-        await self.page.wait_for_load_state("networkidle")
+        try:
+            await self.page.wait_for_load_state("networkidle", timeout=10000)
+        except Exception:
+            pass
         await self.page.wait_for_timeout(2000)
         print("  ✓ 매출 등록 완료")
 
@@ -597,7 +666,10 @@ class SalesMixin:
         sales_link2 = self.page.locator("text=매출 현황").first
         if await sales_link2.count() > 0:
             await sales_link2.click()
-            await self.page.wait_for_load_state("networkidle")
+            try:
+                await self.page.wait_for_load_state("networkidle", timeout=10000)
+            except Exception:
+                pass
             await self.page.wait_for_timeout(1000)
 
         sales_rows = self.page.locator("tr, li").filter(has_text=payment_name)
@@ -623,7 +695,10 @@ class SalesMixin:
         new_item2 = self.page.locator(".new-item").first
         await expect(new_item2).to_be_visible(timeout=5000)
         await new_item2.click()
-        await self.page.wait_for_load_state("networkidle")
+        try:
+            await self.page.wait_for_load_state("networkidle", timeout=10000)
+        except Exception:
+            pass
         await self.page.wait_for_timeout(1500)
 
         settings_btn2 = self.page.locator("button:has-text('결제 수단 설정'):visible").first

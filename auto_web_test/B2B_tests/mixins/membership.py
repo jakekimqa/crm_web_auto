@@ -114,7 +114,11 @@ class MembershipMixin:
             pass
 
         # 페이지 reload하여 최신 금액 반영
-        await detail_page.reload(wait_until="networkidle")
+        try:
+            await detail_page.reload(wait_until="domcontentloaded", timeout=15000)
+        except Exception:
+            pass
+        await detail_page.wait_for_timeout(1000)
 
         # 좌측 수치 검증: 실매출 200,000원 / 정액권 220,000원
         after_sales, after_membership = await self._get_customer_summary_amounts(detail_page)

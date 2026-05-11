@@ -38,12 +38,11 @@ async def clean_state(runner):
             await p.close()
     await runner.focus_main_page()
     base = runner.base_url.replace("/signin", "")
+    await runner.page.goto(f"{base}/book/calendar", wait_until="domcontentloaded")
     try:
-        await runner.page.goto(f"{base}/book/calendar", wait_until="domcontentloaded")
         await runner.page.wait_for_load_state("networkidle", timeout=10000)
     except Exception:
-        await runner.page.goto(f"{base}/book/calendar", wait_until="domcontentloaded")
-        await runner.page.wait_for_load_state("networkidle", timeout=10000)
+        pass
     await runner._dismiss_popup()
     yield
 
@@ -266,7 +265,7 @@ async def _wait_for_batch(runner, staff_name, expected_sales_count, max_retries=
             print(f"  → {interval}초 대기 후 재시도...")
             await runner.page.wait_for_timeout(interval * 1000)
             base = runner.base_url.replace("/signin", "")
-            await runner.page.goto(f"{base}/book/calendar", wait_until="networkidle")
+            await runner.page.goto(f"{base}/book/calendar", wait_until="domcontentloaded")
 
     raise AssertionError(
         f"배치 반영 타임아웃: {staff_name} 매출 건수가 {expected_sales_count}건에 도달하지 못함 "

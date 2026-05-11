@@ -271,13 +271,19 @@ class StatisticsMixin:
         marketing_menu = self.page.locator("h3:has-text('마케팅')").first
         await expect(marketing_menu).to_be_visible(timeout=5000)
         await marketing_menu.click()
-        await self.page.wait_for_load_state("networkidle")
+        try:
+            await self.page.wait_for_load_state("networkidle", timeout=10000)
+        except Exception:
+            pass
         await self.page.wait_for_timeout(1000)
 
         send_history_btn = self.page.locator("button:has-text('전송 내역')").first
         await expect(send_history_btn).to_be_visible(timeout=5000)
         await send_history_btn.click()
-        await self.page.wait_for_load_state("networkidle")
+        try:
+            await self.page.wait_for_load_state("networkidle", timeout=10000)
+        except Exception:
+            pass
         await self.page.wait_for_timeout(2000)
 
         today = datetime.now().strftime("%Y-%m-%d")

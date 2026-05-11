@@ -74,12 +74,19 @@ class CommonMixin:
         await self.page.fill('input[name="id"], input[type="text"]', self.correct_id)
         await self.page.fill('input[name="password"], input[type="password"]', self.correct_password)
         await self.page.click('button[type="submit"], .login-btn')
-        await self.page.wait_for_load_state("networkidle")
+        try:
+            await self.page.wait_for_load_state("networkidle", timeout=10000)
+        except Exception:
+            pass
 
         print(f"3. {self.shop_name} 샵으로 이동")
-        await self.page.wait_for_selector(f"text={self.shop_name}", timeout=10000)
-        await self.page.click("text=샵으로 이동")
-        await self.page.wait_for_load_state("networkidle", timeout=60000)
+        shop_card = self.page.locator(f"text={self.shop_name}").first.locator("xpath=ancestor::div[.//text()[contains(., '샵으로 이동')]]").first
+        await shop_card.locator("text=샵으로 이동").first.click(no_wait_after=True)
+        try:
+            await self.page.wait_for_load_state("domcontentloaded", timeout=15000)
+        except Exception:
+            pass
+        await self.page.wait_for_timeout(2000)
 
         # 공지 팝업이 있으면 닫기
         await self._dismiss_notice_popup()

@@ -20,7 +20,10 @@ class CustomerMixin:
             chart_button = self.page.get_by_text("고객차트", exact=False).first
         await expect(chart_button).to_be_visible(timeout=5000)
         await chart_button.click()
-        await self.page.wait_for_load_state("networkidle")
+        try:
+            await self.page.wait_for_load_state("networkidle", timeout=10000)
+        except Exception:
+            pass
         await expect(self.page.locator("input#customer-search:visible").first).to_be_visible(timeout=5000)
 
     async def _open_new_customer_modal(self):
@@ -84,7 +87,10 @@ class CustomerMixin:
             # 10회, 20회 실패 시 페이지 리로드
             if attempt in (10, 20):
                 await self.page.reload()
-                await self.page.wait_for_load_state("networkidle")
+                try:
+                    await self.page.wait_for_load_state("networkidle", timeout=10000)
+                except Exception:
+                    pass
                 await self.page.wait_for_timeout(1500)
             else:
                 await self.page.wait_for_timeout(1000)
@@ -183,7 +189,10 @@ class CustomerMixin:
                 await reg_btn.scroll_into_view_if_needed()
                 await self.page.wait_for_timeout(500)
 
-            await self.page.wait_for_load_state("networkidle")
+            try:
+                await self.page.wait_for_load_state("networkidle", timeout=10000)
+            except Exception:
+                pass
             await self._ensure_active_page()
             await self.page.wait_for_timeout(2000)
 
