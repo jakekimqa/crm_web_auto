@@ -153,6 +153,8 @@ async def test_b2c_booking_cancel_with_default_reason():
         await runner.page.wait_for_load_state("domcontentloaded")
         await runner.page.wait_for_timeout(3000)
         await runner.page.wait_for_load_state("networkidle")
+        await runner.page.wait_for_timeout(2000)
+        await runner.page.wait_for_load_state("networkidle")
         await runner._dismiss_shop_creation_modals()
         print("  ✓ 샵 생성 완료")
         try:
@@ -352,6 +354,114 @@ async def test_b2c_booking_cancel_with_default_reason():
         print(f"  shopId: {shop_id}")
 
         await zero_page.bring_to_front()
+
+        # ── 로그인 전 기능 테스트: 좋아요 → 앱 다운로드 모달 검증 ──
+        print("  --- 로그인 전 기능 테스트 ---")
+        await zero_page.goto(f"{ZERO_BASE_URL}/main", wait_until="domcontentloaded")
+        await zero_page.wait_for_load_state("networkidle", timeout=15000)
+        await zero_page.wait_for_timeout(1000)
+
+        # 1) 매거진 첫 번째 아이템 클릭
+        magazine_item = zero_page.locator('a[href^="/magazine/"]').first
+        await expect(magazine_item).to_be_visible(timeout=10000)
+        await magazine_item.click()
+        await zero_page.wait_for_load_state("networkidle", timeout=15000)
+        await zero_page.wait_for_timeout(1000)
+        print("  ✓ 매거진 상세 진입")
+
+        # 2) 하단 스크롤 → 좋아요(하트) 버튼 클릭 → 앱 다운로드 모달 확인
+        await zero_page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+        await zero_page.wait_for_timeout(1000)
+        like_btn = zero_page.locator('button[class*="rounded-[70px]"]').first
+        await expect(like_btn).to_be_visible(timeout=5000)
+        await like_btn.click()
+        await zero_page.wait_for_timeout(1000)
+
+        app_modal = zero_page.locator('div[role="dialog"]')
+        await expect(app_modal).to_be_visible(timeout=5000)
+        app_download_btn = app_modal.locator('button[data-track-id="web_app_download_click"]')
+        await expect(app_download_btn).to_be_visible(timeout=3000)
+        modal_text = await app_download_btn.text_content()
+        assert "공비서 앱으로 예약하기" in modal_text, f"앱 다운로드 버튼 텍스트 불일치: {modal_text}"
+        print("  ✓ 매거진 좋아요 → 앱 다운로드 모달 확인")
+
+        # 3) 모달 닫기
+        close_btn = zero_page.locator('button[aria-label="배너 닫기"]')
+        await expect(close_btn).to_be_visible(timeout=3000)
+        await close_btn.click()
+        await zero_page.wait_for_timeout(500)
+
+        # 4) 메인으로 돌아가기
+        await zero_page.go_back()
+        await zero_page.wait_for_load_state("networkidle", timeout=15000)
+        await zero_page.wait_for_timeout(1000)
+
+        # 5) 콕예약 탭 클릭
+        cok_tab = zero_page.locator('a[href="/cok"]')
+        await expect(cok_tab).to_be_visible(timeout=5000)
+        await cok_tab.click()
+        await zero_page.wait_for_load_state("networkidle", timeout=15000)
+        await zero_page.wait_for_timeout(1000)
+        print("  ✓ 콕예약 탭 진입")
+
+        # 6) 콕예약 첫 번째 아이템 클릭
+        cok_item = zero_page.locator('a[id^="cok-list-"]').first
+        await expect(cok_item).to_be_visible(timeout=10000)
+        await cok_item.click()
+        await zero_page.wait_for_load_state("networkidle", timeout=15000)
+        await zero_page.wait_for_timeout(1000)
+        print("  ✓ 콕예약 상세 진입")
+
+        # 7) 좋아요 버튼 클릭 → 앱 다운로드 모달 확인
+        like_btn2 = zero_page.locator('button[class*="rounded-[70px]"]').first
+        await expect(like_btn2).to_be_visible(timeout=5000)
+        await like_btn2.click()
+        await zero_page.wait_for_timeout(1000)
+
+        app_modal2 = zero_page.locator('div[role="dialog"]')
+        await expect(app_modal2).to_be_visible(timeout=5000)
+        app_download_btn2 = app_modal2.locator('button[data-track-id="web_app_download_click"]')
+        await expect(app_download_btn2).to_be_visible(timeout=3000)
+        print("  ✓ 콕예약 좋아요 → 앱 다운로드 모달 확인")
+
+        # 8) 모달 닫기
+        close_btn2 = zero_page.locator('button[aria-label="배너 닫기"]')
+        await expect(close_btn2).to_be_visible(timeout=3000)
+        await close_btn2.click()
+        await zero_page.wait_for_timeout(500)
+
+        # 9) 뒤로가기 → 예약내역 탭 → 마이 탭
+        await zero_page.go_back()
+        await zero_page.wait_for_load_state("networkidle", timeout=15000)
+        await zero_page.wait_for_timeout(500)
+
+        booking_tab = zero_page.locator('a[href="/bookings"]')
+        await expect(booking_tab).to_be_visible(timeout=5000)
+        await booking_tab.click()
+        await zero_page.wait_for_load_state("networkidle", timeout=15000)
+        await zero_page.wait_for_timeout(1000)
+
+        app_btn = zero_page.locator('button[data-track-id="web_app_download_click"]', has_text="공비서 앱에서 확인하기")
+        await expect(app_btn).to_be_visible(timeout=5000)
+        print("  ✓ 예약내역 → '공비서 앱에서 확인하기' 버튼 확인")
+
+        my_tab = zero_page.locator('a[href="/my"]')
+        await expect(my_tab).to_be_visible(timeout=5000)
+        await my_tab.click()
+        await zero_page.wait_for_load_state("networkidle", timeout=15000)
+        await zero_page.wait_for_timeout(1000)
+        print("  ✓ 마이 탭 진입")
+
+        # 10) 로그인/회원가입 버튼 클릭 → 로그인 페이지 이동
+        login_link = zero_page.locator('a[href*="/login"]', has_text="로그인 / 회원가입")
+        await expect(login_link).to_be_visible(timeout=5000)
+        await login_link.click()
+        await zero_page.wait_for_load_state("networkidle", timeout=15000)
+        await zero_page.wait_for_timeout(1000)
+        print("  ✓ 로그인 페이지 진입")
+        print("  --- 로그인 전 기능 테스트 완료 ---\n")
+
+        # 카카오 로그인 (이미 로그인 페이지에 있으므로 직접 처리)
         await _kakao_login(zero_page)
 
         # ── B2C 샵 소식 검증 (샵 페이지 진입 시 지도 아래 노출) ──
