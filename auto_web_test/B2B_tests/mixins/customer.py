@@ -207,6 +207,8 @@ class CustomerMixin:
         await self.page.fill("#customer-contact", customers[0][1])
         reg_btn = self.page.locator("button:has-text('고객 등록'):visible").last
         await expect(reg_btn).to_be_enabled(timeout=5000)
+        await reg_btn.scroll_into_view_if_needed()
+        await self.page.wait_for_timeout(300)
         await reg_btn.click()
         await self.page.wait_for_timeout(2000)
         await self._assert_duplicate_contact_modal_exact()

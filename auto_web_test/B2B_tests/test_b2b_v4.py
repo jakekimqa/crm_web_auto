@@ -38,8 +38,12 @@ async def clean_state(runner):
             await p.close()
     await runner.focus_main_page()
     base = runner.base_url.replace("/signin", "")
-    await runner.page.goto(f"{base}/book/calendar")
-    await runner.page.wait_for_load_state("networkidle")
+    try:
+        await runner.page.goto(f"{base}/book/calendar", wait_until="domcontentloaded")
+        await runner.page.wait_for_load_state("networkidle", timeout=10000)
+    except Exception:
+        await runner.page.goto(f"{base}/book/calendar", wait_until="domcontentloaded")
+        await runner.page.wait_for_load_state("networkidle", timeout=10000)
     await runner._dismiss_popup()
     yield
 

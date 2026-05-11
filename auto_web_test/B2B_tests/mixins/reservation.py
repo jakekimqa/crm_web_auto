@@ -179,10 +179,17 @@ class ReservationMixin:
             assert reserve_card is not None, f"예약 카드 찾기 실패: {r['customer']}"
             await expect(reserve_card).to_be_visible(timeout=5000)
             await reserve_card.click(force=True)
-            await self.page.wait_for_timeout(300)
+            await self.page.wait_for_timeout(500)
+            # 상세 패널 열림 대기
             detail_panel = self.page.locator("div:has(button:has-text('나가기'))").filter(has_text=r["customer"]).first
-            if await detail_panel.count() == 0:
-                detail_panel = self.page.locator("div").filter(has_text=r["customer"]).filter(has_text=r["display_time"]).first
+            try:
+                await expect(detail_panel).to_be_visible(timeout=5000)
+            except Exception:
+                # 패널이 안 열렸으면 다시 클릭
+                await reserve_card.click(force=True)
+                await self.page.wait_for_timeout(1000)
+                detail_panel = self.page.locator("div:has(button:has-text('나가기'))").filter(has_text=r["customer"]).first
+                await expect(detail_panel).to_be_visible(timeout=5000)
             text = await detail_panel.inner_text()
             assert r["customer"] in text, f"고객명 검증 실패: {r['customer']}"
             assert r["display_time"] in text, f"예약시간 검증 실패: {r['display_time']}"
