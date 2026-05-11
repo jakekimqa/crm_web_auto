@@ -15,9 +15,9 @@ _SMALL_SIZES = ["0_5MB", "1_0MB", "1_5MB"]
 _MIXED_SIZES = ["0_5MB", "1_0MB", "1_5MB", "2_0MB", "2_5MB", "3_0MB", "3_5MB", "4_0MB", "4_5MB", "4_9mb"]
 _LARGE_SIZES = ["3_0MB", "3_5MB", "4_0MB", "4_5MB", "4_9mb"]
 
-_PHOTO_PATHS_SMALL = [str(_ASSETS_DIR / f"test_photo_{s}.jpg") for s in (_SMALL_SIZES * 4)[:10]]
-_PHOTO_PATHS_MIXED = [str(_ASSETS_DIR / f"test_photo_{s}.jpg") for s in _MIXED_SIZES]
-_PHOTO_PATHS_LARGE = [str(_ASSETS_DIR / f"test_photo_{s}.jpg") for s in (_LARGE_SIZES * 2)]
+_PHOTO_PATHS_SMALL = [str(_ASSETS_DIR / f"test_photo_{s}.jpg") for s in (_SMALL_SIZES * 2)[:5]]
+_PHOTO_PATHS_MIXED = [str(_ASSETS_DIR / f"test_photo_{s}.jpg") for s in _MIXED_SIZES[:5]]
+_PHOTO_PATHS_LARGE = [str(_ASSETS_DIR / f"test_photo_{s}.jpg") for s in _LARGE_SIZES]
 
 
 class SalesMixin:

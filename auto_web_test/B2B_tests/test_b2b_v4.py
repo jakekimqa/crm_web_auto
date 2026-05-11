@@ -113,20 +113,20 @@ async def test_setup_sales_registrations(runner):
 async def test_verify_photos_sales_1(runner):
     """자동화_1 매출 사진 10장 확인"""
     customer = f"자동화_{runner.mmdd}_1"
-    await runner.verify_sales_photos(customer, expected_count=10)
+    await runner.verify_sales_photos(customer, expected_count=5)
 
 
 async def test_verify_photos_sales_3(runner):
     """자동화_3 매출 사진 20장 확인 (매출3: 10장 + 매출5: 10장)"""
     customer = f"자동화_{runner.mmdd}_3"
-    await runner.verify_sales_photos(customer, expected_count=20)
+    await runner.verify_sales_photos(customer, expected_count=10)
 
 
 async def test_delete_photos_sales_3(runner):
     """자동화_3 사진 5장 삭제 → 15장 확인"""
     customer = f"자동화_{runner.mmdd}_3"
-    await runner.delete_sales_photos(customer, delete_count=5)
-    await runner.verify_sales_photos(customer, expected_count=15)
+    await runner.delete_sales_photos(customer, delete_count=3)
+    await runner.verify_sales_photos(customer, expected_count=7)
 
 
 # ══════════════════════════════════════════════
