@@ -2507,7 +2507,9 @@ async def test_b2c_booking_cancel_with_default_reason():
         print("✓ Phase 7.5 완료\n")
 
         # ── Phase 7.6: 통계 > 시술 통계 검증 ──
-        print("=== Phase 7.6: 통계 > 시술 통계 검증 ===")
+        phase_7_6_failed = False
+        try:
+            print("=== Phase 7.6: 통계 > 시술 통계 검증 ===")
 
         # 좌측 GNB → 통계 메뉴 클릭
         stats_menu = crm_page.locator(
@@ -2627,7 +2629,10 @@ async def test_b2c_booking_cancel_with_default_reason():
         assert found_b, "시술 통계에서 콕예약 B 행 미발견"
 
         await crm_page.screenshot(path=str(SHOT_DIR / "kok_stats_verified.png"))
-        print("✓ Phase 7.6 완료\n")
+            print("✓ Phase 7.6 완료\n")
+        except Exception as e:
+            phase_7_6_failed = True
+            print(f"  ⚠ Phase 7.6 실패 (Phase 8 계속 진행): {e}")
 
         # ── Phase 8: 공비서로 예약받기 비활성화 → 콕예약 경고 배너 확인 ──
         print("=== Phase 8: 공비서로 예약받기 비활성화 ===")
@@ -2735,6 +2740,8 @@ async def test_b2c_booking_cancel_with_default_reason():
         await crm_page.screenshot(path=str(SHOT_DIR / "kok_phase8_04_warning_banner.png"))
         print("✓ Phase 8 완료\n")
 
+        if phase_7_6_failed:
+            pytest.fail("Phase 7.6 시술 통계 검증 실패 (Phase 8은 성공)")
         print("=== 전체 테스트 성공! ===")
 
     finally:
