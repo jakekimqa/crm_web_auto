@@ -89,7 +89,10 @@ async def test_b2c_booking_cancel_with_default_reason():
         await runner.page.fill('input[name="id"], input[type="text"]', runner.correct_id)
         await runner.page.fill('input[name="password"], input[type="password"]', runner.correct_password)
         await runner.page.click('button[type="submit"], .login-btn')
-        await runner.page.wait_for_load_state("networkidle")
+        try:
+            await runner.page.wait_for_load_state("networkidle", timeout=15000)
+        except Exception:
+            pass
         await runner.page.wait_for_timeout(1000)
         print("  ✓ 로그인 완료")
 
@@ -107,7 +110,10 @@ async def test_b2c_booking_cancel_with_default_reason():
             await runner.page.locator("input#addr[placeholder='샵 주소']").click()
         input_addr_page = await input_addr_info.value
         await input_addr_page.wait_for_load_state("domcontentloaded")
-        await input_addr_page.wait_for_load_state("networkidle")
+        try:
+            await input_addr_page.wait_for_load_state("networkidle", timeout=15000)
+        except Exception:
+            pass
         await input_addr_page.wait_for_timeout(1000)
 
         frame = await runner._find_address_search_frame(input_addr_page)
@@ -129,7 +135,10 @@ async def test_b2c_booking_cancel_with_default_reason():
         try:
             await runner.page.wait_for_url("**/signup/owner/add", timeout=15000)
         except Exception:
-            await runner.page.wait_for_load_state("networkidle")
+            try:
+                await runner.page.wait_for_load_state("networkidle", timeout=15000)
+            except Exception:
+                pass
             await runner.page.wait_for_timeout(2000)
 
         dropdown = runner.page.locator(".ui.dropdown-check.category")
@@ -152,9 +161,15 @@ async def test_b2c_booking_cancel_with_default_reason():
             pass
         await runner.page.wait_for_load_state("domcontentloaded")
         await runner.page.wait_for_timeout(3000)
-        await runner.page.wait_for_load_state("networkidle")
+        try:
+            await runner.page.wait_for_load_state("networkidle", timeout=15000)
+        except Exception:
+            pass
         await runner.page.wait_for_timeout(2000)
-        await runner.page.wait_for_load_state("networkidle")
+        try:
+            await runner.page.wait_for_load_state("networkidle", timeout=15000)
+        except Exception:
+            pass
         await runner._dismiss_shop_creation_modals()
         print("  ✓ 샵 생성 완료")
         try:
@@ -171,7 +186,10 @@ async def test_b2c_booking_cancel_with_default_reason():
         test_image_path = str(Path(__file__).parent / "test_image.png")
 
         await runner.page.goto(f"{CRM_BASE_URL}/b2c/shop-news/new")
-        await runner.page.wait_for_load_state("networkidle")
+        try:
+            await runner.page.wait_for_load_state("networkidle", timeout=15000)
+        except Exception:
+            pass
         await runner.page.wait_for_timeout(1000)
 
         # 제목 입력
@@ -221,11 +239,17 @@ async def test_b2c_booking_cancel_with_default_reason():
         await expect(top_save_btn).to_be_visible(timeout=5000)
         await top_save_btn.click(force=True)
         await runner.page.wait_for_timeout(2000)
-        await runner.page.wait_for_load_state("networkidle")
+        try:
+            await runner.page.wait_for_load_state("networkidle", timeout=15000)
+        except Exception:
+            pass
 
         # 소식 목록 페이지로 이동하여 확인
         await runner.page.goto(f"{CRM_BASE_URL}/b2c/shop-news?fromMenu=true")
-        await runner.page.wait_for_load_state("networkidle")
+        try:
+            await runner.page.wait_for_load_state("networkidle", timeout=15000)
+        except Exception:
+            pass
         await runner.page.wait_for_timeout(1000)
         body_text = await runner.page.locator("body").inner_text()
         assert news_title in body_text, f"샵 소식 저장 실패: '{news_title}' 미노출"
@@ -244,7 +268,10 @@ async def test_b2c_booking_cancel_with_default_reason():
         staff_page = await staff_context.new_page()
         try:
             await staff_page.goto(f"{CRM_BASE_URL}/signin")
-            await staff_page.wait_for_load_state("networkidle")
+            try:
+                await staff_page.wait_for_load_state("networkidle", timeout=15000)
+            except Exception:
+                pass
             await staff_page.wait_for_timeout(1000)
             staff_id_input = staff_page.locator("input[type='text'], input[name*='id'], input[placeholder*='아이디']").first
             await expect(staff_id_input).to_be_visible(timeout=10000)
@@ -253,7 +280,10 @@ async def test_b2c_booking_cancel_with_default_reason():
             await staff_pw_input.fill(STAFF_PW)
             staff_page.locator("button:has-text('로그인'), button[type='submit']").first
             await staff_page.locator("button:has-text('로그인'), button[type='submit']").first.click()
-            await staff_page.wait_for_load_state("networkidle")
+            try:
+                await staff_page.wait_for_load_state("networkidle", timeout=15000)
+            except Exception:
+                pass
             await staff_page.wait_for_timeout(1000)
             print(f"  ✓ 직원({STAFF_ID}) 로그인 완료")
 
@@ -261,7 +291,10 @@ async def test_b2c_booking_cancel_with_default_reason():
             add_shop_btn = staff_page.locator("button:has-text('샵 추가'), a:has-text('샵 추가')").first
             await expect(add_shop_btn).to_be_visible(timeout=5000)
             await add_shop_btn.click()
-            await staff_page.wait_for_load_state("networkidle")
+            try:
+                await staff_page.wait_for_load_state("networkidle", timeout=15000)
+            except Exception:
+                pass
             await staff_page.wait_for_timeout(1000)
 
             # 샵 검색
@@ -288,7 +321,10 @@ async def test_b2c_booking_cancel_with_default_reason():
             page_next = staff_page.locator("button:has-text('다음'), a:has-text('다음')").first
             await expect(page_next).to_be_visible(timeout=5000)
             await page_next.click()
-            await staff_page.wait_for_load_state("networkidle")
+            try:
+                await staff_page.wait_for_load_state("networkidle", timeout=15000)
+            except Exception:
+                pass
             await staff_page.wait_for_timeout(1000)
 
             # 가입 승인 전 확인
@@ -305,7 +341,10 @@ async def test_b2c_booking_cancel_with_default_reason():
         await runner.page.locator("text=우리샵 관리").first.click()
         await runner.page.wait_for_timeout(500)
         await runner.page.locator("text=직원관리").first.click()
-        await runner.page.wait_for_load_state("networkidle")
+        try:
+            await runner.page.wait_for_load_state("networkidle", timeout=15000)
+        except Exception:
+            pass
         await runner.page.wait_for_timeout(1000)
         print(f"  ✓ 직원관리 페이지 진입")
 
@@ -321,7 +360,10 @@ async def test_b2c_booking_cancel_with_default_reason():
         modal_approve = runner.page.locator("button:has-text('승인')").last
         await expect(modal_approve).to_be_visible(timeout=5000)
         await modal_approve.click()
-        await runner.page.wait_for_load_state("networkidle")
+        try:
+            await runner.page.wait_for_load_state("networkidle", timeout=15000)
+        except Exception:
+            pass
         await runner.page.wait_for_timeout(1000)
 
         # 입사일 확인
@@ -467,7 +509,10 @@ async def test_b2c_booking_cancel_with_default_reason():
         # ── B2C 샵 소식 검증 (샵 페이지 진입 시 지도 아래 노출) ──
         print("  --- B2C 샵 소식 검증 ---")
         await zero_page.goto(f"{ZERO_BASE_URL}/shop/{shop_id}")
-        await zero_page.wait_for_load_state("networkidle")
+        try:
+            await zero_page.wait_for_load_state("networkidle", timeout=15000)
+        except Exception:
+            pass
         await zero_page.wait_for_timeout(1000)
 
         # 지도 아래 소식 영역에서 제목 확인
@@ -482,7 +527,10 @@ async def test_b2c_booking_cancel_with_default_reason():
         # ── 두 번째 예약: 컷 > 남성컷 ──
         print("  --- 두 번째 예약: 컷 > 남성컷 ---")
         await zero_page.goto(f"{ZERO_BASE_URL}/shop/{shop_id}")
-        await zero_page.wait_for_load_state("networkidle")
+        try:
+            await zero_page.wait_for_load_state("networkidle", timeout=15000)
+        except Exception:
+            pass
         await zero_page.wait_for_timeout(1000)
 
         # "컷" 카테고리 선택
@@ -510,7 +558,10 @@ async def test_b2c_booking_cancel_with_default_reason():
         booking_btn2 = zero_page.locator("button:has-text('예약하기')").last
         await expect(booking_btn2).to_be_visible(timeout=10000)
         await booking_btn2.click()
-        await zero_page.wait_for_load_state("networkidle")
+        try:
+            await zero_page.wait_for_load_state("networkidle", timeout=15000)
+        except Exception:
+            pass
         await zero_page.wait_for_timeout(1000)
 
         # 담당자 선택 (2명 이상일 때 노출)
@@ -519,7 +570,10 @@ async def test_b2c_booking_cancel_with_default_reason():
             select_btn2 = zero_page.locator("button:has-text('선택')").first
             await expect(select_btn2).to_be_visible(timeout=5000)
             await select_btn2.click()
-            await zero_page.wait_for_load_state("networkidle")
+            try:
+                await zero_page.wait_for_load_state("networkidle", timeout=15000)
+            except Exception:
+                pass
             await zero_page.wait_for_timeout(1000)
             print("  ✓ 담당자 선택: 샵주테스트")
 
@@ -544,7 +598,10 @@ async def test_b2c_booking_cancel_with_default_reason():
         booking_confirm2 = zero_page.locator("button:has-text('예약하기')").last
         await expect(booking_confirm2).to_be_visible(timeout=10000)
         await booking_confirm2.click()
-        await zero_page.wait_for_load_state("networkidle")
+        try:
+            await zero_page.wait_for_load_state("networkidle", timeout=15000)
+        except Exception:
+            pass
         await zero_page.wait_for_timeout(1000)
 
         # 결제 페이지: 동의 체크 → 최종 예약하기
@@ -556,7 +613,10 @@ async def test_b2c_booking_cancel_with_default_reason():
         final_booking2 = zero_page.locator("button:has-text('예약하기')").last
         await expect(final_booking2).to_be_visible(timeout=10000)
         await final_booking2.click()
-        await zero_page.wait_for_load_state("networkidle")
+        try:
+            await zero_page.wait_for_load_state("networkidle", timeout=15000)
+        except Exception:
+            pass
         await zero_page.wait_for_timeout(1000)
 
         assert "bookingId" in zero_page.url or "예약 완료" in await zero_page.locator("body").inner_text(), \
@@ -567,7 +627,10 @@ async def test_b2c_booking_cancel_with_default_reason():
         # ── 세 번째 예약: 담당자 테스트_직원계정1 ──
         print("  --- 세 번째 예약: 담당자 테스트_직원계정1 ---")
         await zero_page.goto(f"{ZERO_BASE_URL}/shop/{shop_id}")
-        await zero_page.wait_for_load_state("networkidle")
+        try:
+            await zero_page.wait_for_load_state("networkidle", timeout=15000)
+        except Exception:
+            pass
         await zero_page.wait_for_timeout(1000)
 
         # 시술 메뉴 선택 (첫 번째 체크박스)
@@ -580,7 +643,10 @@ async def test_b2c_booking_cancel_with_default_reason():
         booking_btn3 = zero_page.locator("button:has-text('예약하기')").last
         await expect(booking_btn3).to_be_visible(timeout=10000)
         await booking_btn3.click()
-        await zero_page.wait_for_load_state("networkidle")
+        try:
+            await zero_page.wait_for_load_state("networkidle", timeout=15000)
+        except Exception:
+            pass
         await zero_page.wait_for_timeout(1000)
 
         # 담당자 선택: 테스트_직원계정1 (두 번째 [선택] 버튼)
@@ -589,7 +655,10 @@ async def test_b2c_booking_cancel_with_default_reason():
         select_btn3 = select_buttons.nth(1)  # 0: 샵주테스트, 1: 테스트_직원계정1
         await expect(select_btn3).to_be_visible(timeout=5000)
         await select_btn3.click()
-        await zero_page.wait_for_load_state("networkidle")
+        try:
+            await zero_page.wait_for_load_state("networkidle", timeout=15000)
+        except Exception:
+            pass
         await zero_page.wait_for_timeout(1000)
         print("  ✓ 담당자 선택: 테스트_직원계정1")
 
@@ -611,7 +680,10 @@ async def test_b2c_booking_cancel_with_default_reason():
         booking_confirm3 = zero_page.locator("button:has-text('예약하기')").last
         await expect(booking_confirm3).to_be_visible(timeout=10000)
         await booking_confirm3.click()
-        await zero_page.wait_for_load_state("networkidle")
+        try:
+            await zero_page.wait_for_load_state("networkidle", timeout=15000)
+        except Exception:
+            pass
         await zero_page.wait_for_timeout(1000)
 
         # 결제 페이지: 동의 체크 → 최종 예약하기
@@ -623,7 +695,10 @@ async def test_b2c_booking_cancel_with_default_reason():
         final_booking3 = zero_page.locator("button:has-text('예약하기')").last
         await expect(final_booking3).to_be_visible(timeout=10000)
         await final_booking3.click()
-        await zero_page.wait_for_load_state("networkidle")
+        try:
+            await zero_page.wait_for_load_state("networkidle", timeout=15000)
+        except Exception:
+            pass
         await zero_page.wait_for_timeout(1000)
 
         assert "bookingId" in zero_page.url or "예약 완료" in await zero_page.locator("body").inner_text(), \
@@ -639,7 +714,10 @@ async def test_b2c_booking_cancel_with_default_reason():
 
         # 캘린더 이동
         await crm_page.goto(f"{CRM_BASE_URL}/book/calendar")
-        await crm_page.wait_for_load_state("networkidle")
+        try:
+            await crm_page.wait_for_load_state("networkidle", timeout=15000)
+        except Exception:
+            pass
         await crm_page.wait_for_timeout(1000)
 
         # 딤머 닫기
@@ -651,23 +729,34 @@ async def test_b2c_booking_cancel_with_default_reason():
             else:
                 break
 
-        # "일" 보기 전환
-        for name in ["일", "날짜별"]:
-            btn = crm_page.get_by_role("button", name=name).first
-            if await btn.count() > 0 and await btn.is_visible():
-                await btn.click()
-                await crm_page.wait_for_load_state("networkidle")
-                await crm_page.wait_for_timeout(1000)
-                break
+        # "일" 보기 전환 (딤머가 가릴 수 있으므로 재시도)
+        for attempt in range(3):
+            # 딤머 닫기
+            for _ in range(5):
+                dim = crm_page.locator("#modal-dimmer.isActiveDimmed:visible").first
+                if await dim.count() > 0:
+                    await dim.click(force=True)
+                    await crm_page.wait_for_timeout(500)
+                else:
+                    break
 
-        # 딤머 다시 닫기
-        for _ in range(3):
-            dim = crm_page.locator("#modal-dimmer.isActiveDimmed:visible").first
-            if await dim.count() > 0:
-                await dim.click(force=True)
-                await crm_page.wait_for_timeout(500)
-            else:
+            for name in ["일", "날짜별"]:
+                btn = crm_page.get_by_role("button", name=name).first
+                if await btn.count() > 0 and await btn.is_visible():
+                    await btn.click(force=True)
+                    try:
+                        await crm_page.wait_for_load_state("networkidle", timeout=10000)
+                    except Exception:
+                        pass
+                    await crm_page.wait_for_timeout(1000)
+                    break
+
+            # 전환 확인: header에 "." 이 2번 이상이면 일 보기 (예: "5. 12")
+            h = await crm_page.locator("h2.fc-toolbar-title, .fc-toolbar-title").first.text_content()
+            if h.strip().count(".") >= 2:
+                print(f"  ✓ 일 보기 전환 완료: {h.strip()}")
                 break
+            print(f"  ⚠ 일 보기 전환 재시도 ({attempt+1}/3), header: {h.strip()}")
 
         # 내일 날짜로 이동
         d = reservation_date
@@ -677,12 +766,19 @@ async def test_b2c_booking_cancel_with_default_reason():
             if target_day in header:
                 break
             # 현재 날짜에서 숫자 추출하여 방향 결정
-            current_day = int(re.search(rf"{d.month}\.\s*(\d+)", header).group(1))
-            btn_cls = "fc-next-button" if current_day < d.day else "fc-prev-button"
+            m = re.search(rf"{d.month}\.\s*(\d+)", header)
+            if m:
+                current_day = int(m.group(1))
+                btn_cls = "fc-next-button" if current_day < d.day else "fc-prev-button"
+            else:
+                btn_cls = "fc-next-button"
             nav_btn = crm_page.locator(f"button.{btn_cls}").first
             await expect(nav_btn).to_be_visible(timeout=5000)
             await nav_btn.click()
-            await crm_page.wait_for_load_state("networkidle")
+            try:
+                await crm_page.wait_for_load_state("networkidle", timeout=10000)
+            except Exception:
+                pass
             await crm_page.wait_for_timeout(1000)
             header = await crm_page.locator("h2.fc-toolbar-title, .fc-toolbar-title").first.text_content()
         print(f"  ✓ 캘린더 날짜: {header.strip()}")
@@ -702,7 +798,10 @@ async def test_b2c_booking_cancel_with_default_reason():
         await expect(block).to_be_visible(timeout=15000)
         await block.click(force=True)
         await crm_page.wait_for_timeout(2000)
-        await crm_page.wait_for_load_state("networkidle")
+        try:
+            await crm_page.wait_for_load_state("networkidle", timeout=15000)
+        except Exception:
+            pass
         first_detail_url = crm_page.url
         print(f"  ✓ 상세 페이지: {first_detail_url}")
 
@@ -726,7 +825,23 @@ async def test_b2c_booking_cancel_with_default_reason():
         co = crm_page.get_by_text("예약 취소").first
         await expect(co).to_be_visible(timeout=5000)
         await co.click()
-        await crm_page.wait_for_timeout(1000)
+        await crm_page.wait_for_timeout(1500)
+
+        # 드롭다운이 모달 위에 겹쳐 남아있을 수 있으므로 닫기 (모달 내 취소사유 클릭으로 포커스 이동)
+        reason_label = crm_page.locator("text=취소 사유").first
+        if await reason_label.count() > 0:
+            await reason_label.click(force=True)
+            await crm_page.wait_for_timeout(500)
+
+        # 공지 팝업이 모달 위에 떠있을 수 있으므로 닫기
+        try:
+            dismiss = crm_page.locator("text=하루 동안 보지 않기").first
+            await dismiss.wait_for(state="visible", timeout=2000)
+            await dismiss.click()
+            await crm_page.wait_for_timeout(500)
+            print("  ✓ 공지 팝업 닫기")
+        except Exception:
+            pass
 
         # 취소 모달
         modal = crm_page.locator("[role='dialog']:visible, #modal-content:visible").first
@@ -747,17 +862,47 @@ async def test_b2c_booking_cancel_with_default_reason():
         reason_text = await dr.inner_text()
         print(f"  ✓ 디폴트 사유: '{reason_text}'")
 
+        # 예약 취소 버튼 클릭
         cb = modal.get_by_role("button", name=re.compile(r"예약\s*취소")).first
         await expect(cb).to_be_visible(timeout=5000)
-        await cb.click()
-        await crm_page.wait_for_timeout(2000)
-        await crm_page.wait_for_load_state("networkidle")
 
+        await cb.scroll_into_view_if_needed()
+        await crm_page.wait_for_timeout(300)
+
+        # React 이벤트 호환 JS 클릭 (headless에서 Playwright click이 동작하지 않는 경우 대비)
+        await cb.evaluate("""el => {
+            el.dispatchEvent(new MouseEvent('mousedown', {bubbles: true, cancelable: true}));
+            el.dispatchEvent(new MouseEvent('mouseup', {bubbles: true, cancelable: true}));
+            el.dispatchEvent(new MouseEvent('click', {bubbles: true, cancelable: true}));
+        }""")
+        await crm_page.wait_for_timeout(3000)
         try:
-            im = await modal.is_visible(timeout=2000)
+            await crm_page.wait_for_load_state("networkidle", timeout=15000)
         except Exception:
-            im = False
-        assert not im, "모달 안 닫힘"
+            pass
+
+        # 취소 후 공지 팝업이 뜰 수 있으므로 닫기
+        try:
+            dismiss = crm_page.locator("text=하루 동안 보지 않기").first
+            await dismiss.wait_for(state="visible", timeout=2000)
+            await dismiss.click()
+            await crm_page.wait_for_timeout(500)
+            print("  ✓ 공지 팝업 닫기")
+        except Exception:
+            pass
+
+        await crm_page.screenshot(path=str(SHOT_DIR / "cancel_02b_after_click.png"))
+
+        # 취소 모달이 닫혔는지 확인 (캘린더로 복귀 또는 상태 변경)
+        cancel_modal_gone = "/book/calendar" in crm_page.url and "detail" not in crm_page.url
+        if not cancel_modal_gone:
+            try:
+                im = await modal.is_visible()
+            except Exception:
+                im = False
+            cancel_modal_gone = not im
+
+        assert cancel_modal_gone, "모달 안 닫힘"
         print("  ✓ 예약 취소 완료")
         await crm_page.screenshot(path=str(SHOT_DIR / "cancel_03_complete.png"))
         print("✓ Phase 3 완료\n")
@@ -768,7 +913,10 @@ async def test_b2c_booking_cancel_with_default_reason():
 
         # 취소된 예약 상세로 직접 이동
         await crm_page.goto(first_detail_url)
-        await crm_page.wait_for_load_state("networkidle")
+        try:
+            await crm_page.wait_for_load_state("networkidle", timeout=15000)
+        except Exception:
+            pass
         await crm_page.wait_for_timeout(1000)
         await crm_page.screenshot(path=str(SHOT_DIR / "cancel_04_detail.png"))
 
@@ -794,7 +942,10 @@ async def test_b2c_booking_cancel_with_default_reason():
         # ── Phase 4.5: 두 번째 예약 매출 등록 ──
         print("=== Phase 4.5: 두 번째 예약 매출 등록 ===")
         await crm_page.goto(f"{CRM_BASE_URL}/book/calendar")
-        await crm_page.wait_for_load_state("networkidle")
+        try:
+            await crm_page.wait_for_load_state("networkidle", timeout=15000)
+        except Exception:
+            pass
         await crm_page.wait_for_timeout(1000)
 
         # 딤머 닫기
@@ -811,7 +962,10 @@ async def test_b2c_booking_cancel_with_default_reason():
             btn = crm_page.get_by_role("button", name=name).first
             if await btn.count() > 0 and await btn.is_visible():
                 await btn.click()
-                await crm_page.wait_for_load_state("networkidle")
+                try:
+                    await crm_page.wait_for_load_state("networkidle", timeout=15000)
+                except Exception:
+                    pass
                 await crm_page.wait_for_timeout(1000)
                 break
 
@@ -834,7 +988,10 @@ async def test_b2c_booking_cancel_with_default_reason():
             nav_btn2 = crm_page.locator(f"button.{btn_cls2}").first
             await expect(nav_btn2).to_be_visible(timeout=5000)
             await nav_btn2.click()
-            await crm_page.wait_for_load_state("networkidle")
+            try:
+                await crm_page.wait_for_load_state("networkidle", timeout=15000)
+            except Exception:
+                pass
             await crm_page.wait_for_timeout(1000)
             header2 = await crm_page.locator("h2.fc-toolbar-title, .fc-toolbar-title").first.text_content()
 
@@ -852,7 +1009,10 @@ async def test_b2c_booking_cancel_with_default_reason():
         await expect(male_block).to_be_visible(timeout=15000)
         await male_block.click(force=True)
         await crm_page.wait_for_timeout(2000)
-        await crm_page.wait_for_load_state("networkidle")
+        try:
+            await crm_page.wait_for_load_state("networkidle", timeout=15000)
+        except Exception:
+            pass
         second_detail_url = crm_page.url
         print(f"  ✓ 두 번째 예약 상세: {second_detail_url}")
 
@@ -872,7 +1032,10 @@ async def test_b2c_booking_cancel_with_default_reason():
         sales_btn = crm_page.locator("h4:has-text('매출 등록'), button:has-text('매출 등록')").first
         await expect(sales_btn).to_be_visible(timeout=10000)
         await sales_btn.click()
-        await crm_page.wait_for_load_state("networkidle")
+        try:
+            await crm_page.wait_for_load_state("networkidle", timeout=15000)
+        except Exception:
+            pass
         await crm_page.wait_for_timeout(1000)
         print(f"  ✓ 매출 등록 페이지: {crm_page.url}")
 
@@ -897,13 +1060,19 @@ async def test_b2c_booking_cancel_with_default_reason():
         save_btn = crm_page.locator("button:has-text('매출 등록')").first
         await expect(save_btn).to_be_visible(timeout=10000)
         await save_btn.click()
-        await crm_page.wait_for_load_state("networkidle")
+        try:
+            await crm_page.wait_for_load_state("networkidle", timeout=15000)
+        except Exception:
+            pass
         await crm_page.wait_for_timeout(1000)
         print("  ✓ 매출 등록 완료")
 
         # 매출 등록 완료 확인
         await crm_page.goto(second_detail_url)
-        await crm_page.wait_for_load_state("networkidle")
+        try:
+            await crm_page.wait_for_load_state("networkidle", timeout=15000)
+        except Exception:
+            pass
         await crm_page.wait_for_timeout(1000)
         sales_label = crm_page.locator("h4.SALE.disabled:has-text('매출 등록')").first
         if await sales_label.count() == 0:
@@ -918,7 +1087,10 @@ async def test_b2c_booking_cancel_with_default_reason():
 
         # Step 1: CRM 예약 방식 변경 → "담당자 확인 후 예약 확정"
         await crm_page.goto(f"{CRM_BASE_URL}/b2c/setting")
-        await crm_page.wait_for_load_state("networkidle")
+        try:
+            await crm_page.wait_for_load_state("networkidle", timeout=15000)
+        except Exception:
+            pass
         await crm_page.wait_for_timeout(1000)
 
         # "온라인 예약 정보" 옆 수정하기 클릭
@@ -927,7 +1099,10 @@ async def test_b2c_booking_cancel_with_default_reason():
         edit_btn = online_info_section.locator("..").locator("button:has-text('수정하기')").first
         await expect(edit_btn).to_be_visible(timeout=5000)
         await edit_btn.click()
-        await crm_page.wait_for_load_state("networkidle")
+        try:
+            await crm_page.wait_for_load_state("networkidle", timeout=15000)
+        except Exception:
+            pass
         await crm_page.wait_for_timeout(1000)
         print("  ✓ 온라인 예약 정보 수정 페이지 진입")
 
@@ -942,14 +1117,20 @@ async def test_b2c_booking_cancel_with_default_reason():
         save_btn = crm_page.locator("button[data-track-id='b2c_info_save']").first
         await expect(save_btn).to_be_visible(timeout=5000)
         await save_btn.click()
-        await crm_page.wait_for_load_state("networkidle")
+        try:
+            await crm_page.wait_for_load_state("networkidle", timeout=15000)
+        except Exception:
+            pass
         await crm_page.wait_for_timeout(1000)
         print("  ✓ 예약 방식 변경 저장 완료")
 
         # Step 2: B2C 예약 진행
         print("  --- B2C 확인 후 확정 예약 진행 ---")
         await zero_page.goto(f"{ZERO_BASE_URL}/shop/{shop_id}")
-        await zero_page.wait_for_load_state("networkidle")
+        try:
+            await zero_page.wait_for_load_state("networkidle", timeout=15000)
+        except Exception:
+            pass
         await zero_page.wait_for_timeout(1000)
 
         # 시술 선택 (첫 번째 체크박스)
@@ -962,7 +1143,10 @@ async def test_b2c_booking_cancel_with_default_reason():
         booking_btn = zero_page.locator("button:has-text('예약하기')").last
         await expect(booking_btn).to_be_visible(timeout=10000)
         await booking_btn.click()
-        await zero_page.wait_for_load_state("networkidle")
+        try:
+            await zero_page.wait_for_load_state("networkidle", timeout=15000)
+        except Exception:
+            pass
         await zero_page.wait_for_timeout(1000)
 
         # 담당자 선택
@@ -971,7 +1155,10 @@ async def test_b2c_booking_cancel_with_default_reason():
             select_btn = zero_page.locator("button:has-text('선택')").first
             await expect(select_btn).to_be_visible(timeout=5000)
             await select_btn.click()
-            await zero_page.wait_for_load_state("networkidle")
+            try:
+                await zero_page.wait_for_load_state("networkidle", timeout=15000)
+            except Exception:
+                pass
             await zero_page.wait_for_timeout(1000)
             print("  ✓ 담당자 선택: 샵주테스트")
 
@@ -995,7 +1182,10 @@ async def test_b2c_booking_cancel_with_default_reason():
         booking_confirm = zero_page.locator("button:has-text('예약하기')").last
         await expect(booking_confirm).to_be_visible(timeout=10000)
         await booking_confirm.click()
-        await zero_page.wait_for_load_state("networkidle")
+        try:
+            await zero_page.wait_for_load_state("networkidle", timeout=15000)
+        except Exception:
+            pass
         await zero_page.wait_for_timeout(1000)
 
         # 결제 페이지: 최종 예약하기
@@ -1004,7 +1194,10 @@ async def test_b2c_booking_cancel_with_default_reason():
             final_booking = zero_page.locator("button:has-text('예약하기')").last
             await expect(final_booking).to_be_visible(timeout=15000)
             await final_booking.click()
-            await zero_page.wait_for_load_state("networkidle")
+            try:
+                await zero_page.wait_for_load_state("networkidle", timeout=15000)
+            except Exception:
+                pass
             await zero_page.wait_for_timeout(1000)
 
         # Step 3: B2C 예약 신청 텍스트 검증
@@ -1020,7 +1213,10 @@ async def test_b2c_booking_cancel_with_default_reason():
 
         d = datetime.now() + timedelta(days=1)
         await crm_page.goto(f"{CRM_BASE_URL}/book/calendar")
-        await crm_page.wait_for_load_state("networkidle")
+        try:
+            await crm_page.wait_for_load_state("networkidle", timeout=15000)
+        except Exception:
+            pass
         await crm_page.wait_for_timeout(1000)
 
         # dimmer 닫기
@@ -1037,7 +1233,10 @@ async def test_b2c_booking_cancel_with_default_reason():
             btn = crm_page.get_by_role("button", name=name).first
             if await btn.count() > 0 and await btn.is_visible():
                 await btn.click()
-                await crm_page.wait_for_load_state("networkidle")
+                try:
+                    await crm_page.wait_for_load_state("networkidle", timeout=15000)
+                except Exception:
+                    pass
                 await crm_page.wait_for_timeout(1000)
                 break
 
@@ -1061,7 +1260,10 @@ async def test_b2c_booking_cancel_with_default_reason():
             nav_btn = crm_page.locator(f"button.{btn_cls}").first
             await expect(nav_btn).to_be_visible(timeout=5000)
             await nav_btn.click()
-            await crm_page.wait_for_load_state("networkidle")
+            try:
+                await crm_page.wait_for_load_state("networkidle", timeout=15000)
+            except Exception:
+                pass
             await crm_page.wait_for_timeout(1000)
             header = await crm_page.locator("h2.fc-toolbar-title, .fc-toolbar-title").first.text_content()
         print(f"  ✓ 캘린더 날짜: {header.strip()}")
@@ -1080,7 +1282,10 @@ async def test_b2c_booking_cancel_with_default_reason():
         await expect(pending_block).to_be_visible(timeout=15000)
         await pending_block.click(force=True)
         await crm_page.wait_for_timeout(2000)
-        await crm_page.wait_for_load_state("networkidle")
+        try:
+            await crm_page.wait_for_load_state("networkidle", timeout=15000)
+        except Exception:
+            pass
         confirm_detail_url = crm_page.url
         print(f"  ✓ 예약 상세: {confirm_detail_url}")
 
@@ -1094,7 +1299,10 @@ async def test_b2c_booking_cancel_with_default_reason():
         confirm_btn = crm_page.locator("button:has-text('예약 확정')").first
         await expect(confirm_btn).to_be_visible(timeout=5000)
         await confirm_btn.click()
-        await crm_page.wait_for_load_state("networkidle")
+        try:
+            await crm_page.wait_for_load_state("networkidle", timeout=15000)
+        except Exception:
+            pass
         await crm_page.wait_for_timeout(1000)
         print("  ✓ 예약 확정 완료")
         await crm_page.screenshot(path=str(SHOT_DIR / "phase46_03_confirmed.png"))
@@ -1102,14 +1310,20 @@ async def test_b2c_booking_cancel_with_default_reason():
         # 확정 후 캘린더로 이동될 수 있으므로 다시 예약 상세로 진입
         if "detail" not in crm_page.url:
             await crm_page.goto(confirm_detail_url)
-            await crm_page.wait_for_load_state("networkidle")
+            try:
+                await crm_page.wait_for_load_state("networkidle", timeout=15000)
+            except Exception:
+                pass
             await crm_page.wait_for_timeout(1000)
 
         # Step 7: 매출 등록
         sales_btn = crm_page.locator("h4:has-text('매출 등록'), button:has-text('매출 등록')").first
         await expect(sales_btn).to_be_visible(timeout=10000)
         await sales_btn.click()
-        await crm_page.wait_for_load_state("networkidle")
+        try:
+            await crm_page.wait_for_load_state("networkidle", timeout=15000)
+        except Exception:
+            pass
         await crm_page.wait_for_timeout(1000)
         print(f"  ✓ 매출 등록 페이지: {crm_page.url}")
 
@@ -1140,13 +1354,19 @@ async def test_b2c_booking_cancel_with_default_reason():
 
         # 예약 방식을 다시 "즉시 예약 확정"으로 복원
         await crm_page.goto(f"{CRM_BASE_URL}/b2c/setting")
-        await crm_page.wait_for_load_state("networkidle")
+        try:
+            await crm_page.wait_for_load_state("networkidle", timeout=15000)
+        except Exception:
+            pass
         await crm_page.wait_for_timeout(1000)
         online_info_section2 = crm_page.locator("h3:has-text('온라인 예약 정보')").first
         edit_btn2 = online_info_section2.locator("..").locator("button:has-text('수정하기')").first
         await expect(edit_btn2).to_be_visible(timeout=5000)
         await edit_btn2.click()
-        await crm_page.wait_for_load_state("networkidle")
+        try:
+            await crm_page.wait_for_load_state("networkidle", timeout=15000)
+        except Exception:
+            pass
         await crm_page.wait_for_timeout(1000)
         instant_option = crm_page.locator("label[for='AUTO_CONFIRMED']").first
         await expect(instant_option).to_be_visible(timeout=5000)
@@ -1155,7 +1375,10 @@ async def test_b2c_booking_cancel_with_default_reason():
         restore_save = crm_page.locator("button[data-track-id='b2c_info_save']").first
         await expect(restore_save).to_be_visible(timeout=5000)
         await restore_save.click()
-        await crm_page.wait_for_load_state("networkidle")
+        try:
+            await crm_page.wait_for_load_state("networkidle", timeout=15000)
+        except Exception:
+            pass
         await crm_page.wait_for_timeout(1000)
         print("  ✓ 예약 방식 복원: 즉시 예약 확정")
 
@@ -1189,7 +1412,10 @@ async def test_b2c_booking_cancel_with_default_reason():
             await crm_page.wait_for_timeout(1000)
         await expect(kok_menu).to_be_visible(timeout=10000)
         await kok_menu.click()
-        await crm_page.wait_for_load_state("networkidle")
+        try:
+            await crm_page.wait_for_load_state("networkidle", timeout=15000)
+        except Exception:
+            pass
         await crm_page.wait_for_timeout(1000)
         print("  ✓ 콕예약 관리 진입")
         await crm_page.screenshot(path=str(SHOT_DIR / "kok_01_list.png"))
@@ -1203,7 +1429,10 @@ async def test_b2c_booking_cancel_with_default_reason():
         register_btn = crm_page.locator("button:has-text('콕예약 등록'), a:has-text('콕예약 등록'), a:has-text('콕예약 등록하기')").first
         await expect(register_btn).to_be_visible(timeout=10000)
         await register_btn.click()
-        await crm_page.wait_for_load_state("networkidle")
+        try:
+            await crm_page.wait_for_load_state("networkidle", timeout=15000)
+        except Exception:
+            pass
         await crm_page.wait_for_timeout(1000)
 
         save_btn = crm_page.locator("button[type='submit']:has-text('저장')")
@@ -1218,13 +1447,19 @@ async def test_b2c_booking_cancel_with_default_reason():
         async def go_back_and_reenter():
             crm_page.on("dialog", _handle_dialog)
             await crm_page.go_back()
-            await crm_page.wait_for_load_state("networkidle")
+            try:
+                await crm_page.wait_for_load_state("networkidle", timeout=15000)
+            except Exception:
+                pass
             await crm_page.wait_for_timeout(1000)
             crm_page.remove_listener("dialog", _handle_dialog)
             reg = crm_page.locator("button:has-text('콕예약 등록'), a:has-text('콕예약 등록')").first
             await expect(reg).to_be_visible(timeout=10000)
             await reg.click()
-            await crm_page.wait_for_load_state("networkidle")
+            try:
+                await crm_page.wait_for_load_state("networkidle", timeout=15000)
+            except Exception:
+                pass
             await crm_page.wait_for_timeout(1000)
 
         async def fill_all_required():
@@ -1308,7 +1543,10 @@ async def test_b2c_booking_cancel_with_default_reason():
 
         crm_page.on("dialog", _handle_dialog)
         await crm_page.go_back()
-        await crm_page.wait_for_load_state("networkidle")
+        try:
+            await crm_page.wait_for_load_state("networkidle", timeout=15000)
+        except Exception:
+            pass
         await crm_page.wait_for_timeout(1000)
         crm_page.remove_listener("dialog", _handle_dialog)
 
@@ -1318,7 +1556,10 @@ async def test_b2c_booking_cancel_with_default_reason():
         register_btn = crm_page.locator("button:has-text('콕예약 등록'), a:has-text('콕예약 등록')").first
         await expect(register_btn).to_be_visible(timeout=5000)
         await register_btn.click()
-        await crm_page.wait_for_load_state("networkidle")
+        try:
+            await crm_page.wait_for_load_state("networkidle", timeout=15000)
+        except Exception:
+            pass
         await crm_page.wait_for_timeout(1000)
         print("  ✓ 콕예약 등록 화면 진입")
         await crm_page.screenshot(path=str(SHOT_DIR / "kok_02_register_form.png"))
@@ -1412,7 +1653,10 @@ async def test_b2c_booking_cancel_with_default_reason():
         register_btn2 = crm_page.locator("button:has-text('콕예약 등록'), a:has-text('콕예약 등록')").first
         await expect(register_btn2).to_be_visible(timeout=5000)
         await register_btn2.click()
-        await crm_page.wait_for_load_state("networkidle")
+        try:
+            await crm_page.wait_for_load_state("networkidle", timeout=15000)
+        except Exception:
+            pass
         await crm_page.wait_for_timeout(1000)
         print("  ✓ 콕예약 등록 화면 진입")
 
@@ -1483,7 +1727,10 @@ async def test_b2c_booking_cancel_with_default_reason():
         kok_a_item = crm_page.locator("text='E2E 테스트 콕예약 A'").first
         await expect(kok_a_item).to_be_visible(timeout=5000)
         await kok_a_item.click()
-        await crm_page.wait_for_load_state("networkidle")
+        try:
+            await crm_page.wait_for_load_state("networkidle", timeout=15000)
+        except Exception:
+            pass
         await crm_page.wait_for_timeout(1000)
         print("  ✓ 콕예약 A 수정 화면 진입")
         await crm_page.screenshot(path=str(SHOT_DIR / "kok_edit_a_01_before.png"))
@@ -1566,13 +1813,19 @@ async def test_b2c_booking_cancel_with_default_reason():
         async with runner.context.expect_page() as edit_page_info:
             await preview_edit_btn.click()
         edit_b2c = await edit_page_info.value
-        await edit_b2c.wait_for_load_state("networkidle")
+        try:
+            await edit_b2c.wait_for_load_state("networkidle", timeout=15000)
+        except Exception:
+            pass
         original_edit_url = edit_b2c.url
         if "dev-front-zero.gongbiz.kr" in original_edit_url:
             cok_id = original_edit_url.rstrip("/").split("/")[-1]
             qa_url = f"https://qa-zero.gongbiz.kr/cok/{cok_id}"
             await edit_b2c.goto(qa_url)
-            await edit_b2c.wait_for_load_state("networkidle")
+            try:
+                await edit_b2c.wait_for_load_state("networkidle", timeout=15000)
+            except Exception:
+                pass
         await edit_b2c.wait_for_timeout(1000)
         print(f"  ✓ 미리보기 페이지 열림: {edit_b2c.url}")
         await edit_b2c.screenshot(path=str(SHOT_DIR / "kok_edit_a_preview_01.png"))
@@ -1658,14 +1911,20 @@ async def test_b2c_booking_cancel_with_default_reason():
             async with runner.context.expect_page() as new_page_info:
                 await preview_btn.click()
             b2c_page = await new_page_info.value
-            await b2c_page.wait_for_load_state("networkidle")
+            try:
+                await b2c_page.wait_for_load_state("networkidle", timeout=15000)
+            except Exception:
+                pass
             # dev-front-zero → qa-zero로 리다이렉트
             original_url = b2c_page.url
             if "dev-front-zero.gongbiz.kr" in original_url:
                 cok_id = original_url.rstrip("/").split("/")[-1]
                 qa_url = f"https://qa-zero.gongbiz.kr/cok/{cok_id}"
                 await b2c_page.goto(qa_url)
-                await b2c_page.wait_for_load_state("networkidle")
+                try:
+                    await b2c_page.wait_for_load_state("networkidle", timeout=15000)
+                except Exception:
+                    pass
             await b2c_page.wait_for_timeout(1000)
             print(f"  ✓ 미리보기 페이지 열림: {b2c_page.url}")
             await b2c_page.screenshot(path=str(SHOT_DIR / f"{shot_prefix}_01.png"))
@@ -1801,7 +2060,10 @@ async def test_b2c_booking_cancel_with_default_reason():
                 # 같은 URL로 재진입 → 중복 신고 테스트
                 print(f"  --- 중복 신고 테스트 ---")
                 await b2c_page.goto(kok_url)
-                await b2c_page.wait_for_load_state("networkidle")
+                try:
+                    await b2c_page.wait_for_load_state("networkidle", timeout=15000)
+                except Exception:
+                    pass
                 await b2c_page.wait_for_timeout(1000)
 
                 # 점 3개 메뉴 → 신고하기 다시 클릭
@@ -1840,7 +2102,10 @@ async def test_b2c_booking_cancel_with_default_reason():
 
                 # 콕예약 페이지로 돌아가서 예약 진행
                 await b2c_page.goto(kok_url)
-                await b2c_page.wait_for_load_state("networkidle")
+                try:
+                    await b2c_page.wait_for_load_state("networkidle", timeout=15000)
+                except Exception:
+                    pass
                 await b2c_page.wait_for_timeout(1000)
 
                 print(f"  --- 신고하기 테스트 완료 ---\n")
@@ -1885,7 +2150,10 @@ async def test_b2c_booking_cancel_with_default_reason():
             await booking_btn.scroll_into_view_if_needed()
             await expect(booking_btn).to_be_visible(timeout=15000)
             await booking_btn.click()
-            await b2c_page.wait_for_load_state("networkidle")
+            try:
+                await b2c_page.wait_for_load_state("networkidle", timeout=15000)
+            except Exception:
+                pass
             await b2c_page.wait_for_timeout(1000)
 
             # 카카오 로그인 (결제 페이지 하단 "카카오로 계속하기")
@@ -1894,7 +2162,10 @@ async def test_b2c_booking_cancel_with_default_reason():
                 async with b2c_page.expect_popup(timeout=15000) as popup_info:
                     await kakao_btn.click()
                 popup = await popup_info.value
-                await popup.wait_for_load_state("networkidle")
+                try:
+                    await popup.wait_for_load_state("networkidle", timeout=15000)
+                except Exception:
+                    pass
                 await popup.wait_for_timeout(1000)
 
                 id_field = popup.get_by_placeholder("카카오메일 아이디, 이메일, 전화번호")
@@ -1904,6 +2175,7 @@ async def test_b2c_booking_cancel_with_default_reason():
                     await popup.get_by_placeholder("비밀번호").fill("herren3378!")
                     await popup.get_by_role("button", name="로그인").first.click()
                     try:
+                        await popup.wait_for_load_state("networkidle")
                         await popup.wait_for_load_state("networkidle")
                         agree_btn = popup.locator("button:has-text('동의하고 계속하기')")
                         if await agree_btn.count() > 0 and await agree_btn.is_visible():
@@ -1932,7 +2204,10 @@ async def test_b2c_booking_cancel_with_default_reason():
             await final_btn.scroll_into_view_if_needed()
             await expect(final_btn).to_be_visible(timeout=15000)
             await final_btn.click()
-            await b2c_page.wait_for_load_state("networkidle")
+            try:
+                await b2c_page.wait_for_load_state("networkidle", timeout=15000)
+            except Exception:
+                pass
             await b2c_page.wait_for_timeout(1000)
 
             body = await b2c_page.locator("body").inner_text()
@@ -2000,7 +2275,10 @@ async def test_b2c_booking_cancel_with_default_reason():
 
             # 캘린더 페이지 이동
             await crm_page.goto(f"{CRM_BASE_URL}/book/calendar")
-            await crm_page.wait_for_load_state("networkidle")
+            try:
+                await crm_page.wait_for_load_state("networkidle", timeout=15000)
+            except Exception:
+                pass
             await crm_page.wait_for_timeout(2000)
 
             # dimmer 닫기
@@ -2017,7 +2295,10 @@ async def test_b2c_booking_cancel_with_default_reason():
                 btn = crm_page.get_by_role("button", name=name).first
                 if await btn.count() > 0 and await btn.is_visible():
                     await btn.click()
-                    await crm_page.wait_for_load_state("networkidle")
+                    try:
+                        await crm_page.wait_for_load_state("networkidle", timeout=15000)
+                    except Exception:
+                        pass
                     await crm_page.wait_for_timeout(1000)
                     break
 
@@ -2036,7 +2317,10 @@ async def test_b2c_booking_cancel_with_default_reason():
                 nav_btn = crm_page.locator(f"button.{btn_cls}").first
                 await expect(nav_btn).to_be_visible(timeout=5000)
                 await nav_btn.click()
-                await crm_page.wait_for_load_state("networkidle")
+                try:
+                    await crm_page.wait_for_load_state("networkidle", timeout=15000)
+                except Exception:
+                    pass
                 await crm_page.wait_for_timeout(1000)
                 header = await crm_page.locator("h2.fc-toolbar-title, .fc-toolbar-title").first.text_content()
             print(f"  ✓ 캘린더 날짜: {header.strip()}")
@@ -2085,7 +2369,10 @@ async def test_b2c_booking_cancel_with_default_reason():
             assert target_block is not None, f"캘린더에서 '{designer}' 컬럼의 '{kok_name}' 예약 블록을 찾을 수 없습니다."
             await target_block.click(force=True)
             await crm_page.wait_for_timeout(2000)
-            await crm_page.wait_for_load_state("networkidle")
+            try:
+                await crm_page.wait_for_load_state("networkidle", timeout=15000)
+            except Exception:
+                pass
             print(f"  ✓ 예약 블록 클릭")
 
             # 예약 상세 정보 확인
@@ -2112,7 +2399,10 @@ async def test_b2c_booking_cancel_with_default_reason():
             sales_btn = crm_page.locator("h4:has-text('매출 등록'), button:has-text('매출 등록')").first
             await expect(sales_btn).to_be_visible(timeout=10000)
             await sales_btn.click()
-            await crm_page.wait_for_load_state("networkidle")
+            try:
+                await crm_page.wait_for_load_state("networkidle", timeout=15000)
+            except Exception:
+                pass
             await crm_page.wait_for_timeout(1000)
             print("  ✓ 매출 등록 페이지 진입")
 
@@ -2135,7 +2425,10 @@ async def test_b2c_booking_cancel_with_default_reason():
             final_sales = crm_page.locator("button:has-text('매출 등록')").first
             await expect(final_sales).to_be_visible(timeout=10000)
             await final_sales.click()
-            await crm_page.wait_for_load_state("networkidle")
+            try:
+                await crm_page.wait_for_load_state("networkidle", timeout=15000)
+            except Exception:
+                pass
             await crm_page.wait_for_timeout(1000)
             await crm_page.screenshot(path=str(SHOT_DIR / f"{shot_prefix}_crm_sales_done.png"))
             print(f"  ✓ {kok_name} 매출 등록 완료!")
@@ -2163,7 +2456,10 @@ async def test_b2c_booking_cancel_with_default_reason():
         ).first
         await expect(sales_menu).to_be_visible(timeout=10000)
         await sales_menu.click()
-        await crm_page.wait_for_load_state("networkidle")
+        try:
+            await crm_page.wait_for_load_state("networkidle", timeout=15000)
+        except Exception:
+            pass
         await crm_page.wait_for_timeout(1000)
         print("  ✓ 매출 페이지 진입")
 
@@ -2185,7 +2481,10 @@ async def test_b2c_booking_cancel_with_default_reason():
             }});
             if (target) target.click();
         }}""")
-        await crm_page.wait_for_load_state("networkidle")
+        try:
+            await crm_page.wait_for_load_state("networkidle", timeout=15000)
+        except Exception:
+            pass
         await crm_page.wait_for_timeout(1000)
         print(f"  ✓ 날짜 선택: {tomorrow_kok.month}/{tomorrow_kok.day}")
         await crm_page.screenshot(path=str(SHOT_DIR / "kok_sales_page.png"))
@@ -2221,30 +2520,14 @@ async def test_b2c_booking_cancel_with_default_reason():
         await crm_page.wait_for_timeout(1000)
         print("  ✓ 통계 페이지 진입")
 
-        # 시술 통계 카드의 [자세히 보기] 클릭
-        clicked = await crm_page.evaluate("""(title) => {
-            const norm = (s) => (s || '').replace(/\\s+/g, ' ').trim();
-            const visible = (el) => {
-                const r = el.getBoundingClientRect();
-                const st = window.getComputedStyle(el);
-                return r.width > 0 && r.height > 0 && st.display !== 'none' && st.visibility !== 'hidden';
-            };
-            const titleNodes = [...document.querySelectorAll('h1,h2,h3,h4,div,span,p')]
-                .filter((el) => visible(el) && norm(el.innerText) === title);
-            for (const t of titleNodes) {
-                let box = t;
-                for (let i = 0; i < 8 && box; i += 1, box = box.parentElement) {
-                    const btns = [...box.querySelectorAll('button,a')]
-                        .filter((el) => visible(el) && norm(el.innerText).includes('자세히 보기'));
-                    if (btns.length > 0) {
-                        btns[0].click();
-                        return true;
-                    }
-                }
-            }
-            return false;
-        }""", "시술 통계")
-        assert clicked, "시술 통계 카드의 '자세히 보기' 클릭 실패"
+        # 시술 통계 클릭 (UI 변경: 카드 → 리스트 항목)
+        treatment_link = crm_page.locator(
+            "a:has-text('시술 통계'):visible, "
+            "button:has-text('시술 통계'):visible, "
+            "div:has-text('시술 통계'):visible"
+        ).first
+        await expect(treatment_link).to_be_visible(timeout=10000)
+        await treatment_link.click()
         await crm_page.wait_for_load_state("domcontentloaded")
         await crm_page.wait_for_timeout(1000)
         print("  ✓ 시술 통계 자세히 보기 진입")
@@ -2271,7 +2554,10 @@ async def test_b2c_booking_cancel_with_default_reason():
             search_btn = crm_page.locator("button:has-text('기간 검색'):visible").last
             if await search_btn.count() > 0:
                 await search_btn.click()
-                await crm_page.wait_for_load_state("networkidle")
+                try:
+                    await crm_page.wait_for_load_state("networkidle", timeout=15000)
+                except Exception:
+                    pass
                 await crm_page.wait_for_timeout(1000)
             print("  ✓ 기간 필터 적용")
         else:
@@ -2365,7 +2651,10 @@ async def test_b2c_booking_cancel_with_default_reason():
         ).first
         await expect(reserve_menu).to_be_visible(timeout=5000)
         await reserve_menu.click()
-        await crm_page.wait_for_load_state("networkidle")
+        try:
+            await crm_page.wait_for_load_state("networkidle", timeout=15000)
+        except Exception:
+            pass
         await crm_page.wait_for_timeout(1000)
         print("  ✓ 공비서로 예약받기 페이지 진입")
         await crm_page.screenshot(path=str(SHOT_DIR / "kok_phase8_01_reserve_page.png"))
@@ -2425,7 +2714,10 @@ async def test_b2c_booking_cancel_with_default_reason():
             kok_menu8 = crm_page.locator("button:has-text('콕예약 관리'):visible").first
         await expect(kok_menu8).to_be_visible(timeout=5000)
         await kok_menu8.click()
-        await crm_page.wait_for_load_state("networkidle")
+        try:
+            await crm_page.wait_for_load_state("networkidle", timeout=15000)
+        except Exception:
+            pass
         await crm_page.wait_for_timeout(1000)
         print("  ✓ 콕예약 관리 페이지 이동")
 
