@@ -30,31 +30,54 @@ class SalesMixin:
         # 사진 아이콘(0/10) 클릭 → 사진 모달 열기
         photo_icon = self.page.locator("div:has(> svg[icon='systemImage'])").first
         await photo_icon.click()
-        await self.page.wait_for_timeout(500)
+        await self.page.wait_for_timeout(2000)
 
-        # 사진 추가 버튼 클릭 → filechooser 이벤트로 파일 설정
-        add_btn = self.page.locator("button:has-text('사진 추가'):visible").first
-        await expect(add_btn).to_be_visible(timeout=5000)
+        # 사진 추가 + 렌더링 확인 (최대 2회 재시도)
+        expected = len(photo_paths)
+        rendered = 0
 
-        fc_future = asyncio.get_event_loop().create_future()
+        for retry in range(3):
+            add_btn = self.page.locator("button:has-text('사진 추가'):visible").first
+            if await add_btn.count() == 0 or not await add_btn.is_enabled():
+                rendered = await self.page.locator("button:has-text('저장'):visible").first.locator("..").locator("..").locator("svg").count()
+                if rendered > 0:
+                    print(f"  ✓ 사진 추가 버튼 비활성 — 이미 {rendered}장 이상 업로드됨")
+                    break
+            await expect(add_btn).to_be_visible(timeout=5000)
 
-        def _on_fc(file_chooser):
-            if not fc_future.done():
-                fc_future.set_result(file_chooser)
+            fc_future = asyncio.get_event_loop().create_future()
 
-        self.page.on("filechooser", _on_fc)
-        await add_btn.click()
-        try:
-            file_chooser = await asyncio.wait_for(fc_future, timeout=10)
-            await file_chooser.set_files(photo_paths)
-            print(f"  ✓ 사진 {len(photo_paths)}장 일괄 업로드")
-        except asyncio.TimeoutError:
-            print("  ⚠ filechooser 타임아웃, set_input_files 폴백")
-            file_input = self.page.locator("input[type='file']")
-            await file_input.set_input_files(photo_paths)
-            print(f"  ✓ 사진 {len(photo_paths)}장 일괄 업로드 (폴백)")
-        finally:
-            self.page.remove_listener("filechooser", _on_fc)
+            def _on_fc(file_chooser):
+                if not fc_future.done():
+                    fc_future.set_result(file_chooser)
+
+            self.page.on("filechooser", _on_fc)
+            await add_btn.click()
+            try:
+                file_chooser = await asyncio.wait_for(fc_future, timeout=10)
+                await file_chooser.set_files(photo_paths)
+                print(f"  ✓ 사진 {expected}장 일괄 업로드")
+            except asyncio.TimeoutError:
+                print("  ⚠ filechooser 타임아웃, set_input_files 폴백")
+                file_input = self.page.locator("input[type='file']")
+                await file_input.set_input_files(photo_paths)
+                print(f"  ✓ 사진 {expected}장 일괄 업로드 (폴백)")
+            finally:
+                self.page.remove_listener("filechooser", _on_fc)
+
+            # 사진 썸네일이 모달에 실제로 렌더링될 때까지 대기 (최대 30초)
+            save_btn = self.page.locator("button:has-text('저장'):visible").first
+            for _ in range(60):
+                if await save_btn.is_enabled():
+                    rendered = expected
+                    break
+                await self.page.wait_for_timeout(500)
+
+            if rendered >= expected:
+                print(f"  ✓ 사진 렌더링 확인 (저장 버튼 활성화)")
+                break
+
+            print(f"  ⚠ 사진 렌더링 실패, 재시도 {retry + 1}/3")
 
         # 저장 버튼 클릭
         save_btn = self.page.locator("button:has-text('저장'):visible").first
@@ -286,9 +309,10 @@ class SalesMixin:
             await self.page.wait_for_timeout(250)
         await expect(reserve_card).to_be_visible(timeout=5000)
         await reserve_card.click()
-        await self.page.wait_for_timeout(400)
+        await self.page.wait_for_load_state("domcontentloaded", timeout=15000)
+        await self.page.wait_for_timeout(500)
         sales_reg_btn = self.page.locator("button:has-text('매출 등록'):visible").last
-        await expect(sales_reg_btn).to_be_visible(timeout=5000)
+        await expect(sales_reg_btn).to_be_visible(timeout=10000)
         await sales_reg_btn.click()
         await self.page.wait_for_timeout(500)
 
