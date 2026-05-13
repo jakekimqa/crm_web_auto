@@ -1908,7 +1908,7 @@ async def test_b2c_booking_cancel_with_default_reason():
             preview_btn = preview_btn_handle.as_element()
             assert preview_btn is not None, f"'{kok_name}' 미리보기 버튼을 찾을 수 없습니다."
 
-            async with runner.context.expect_page() as new_page_info:
+            async with runner.context.expect_page(timeout=60000) as new_page_info:
                 await preview_btn.click()
             b2c_page = await new_page_info.value
             try:
@@ -2511,124 +2511,123 @@ async def test_b2c_booking_cancel_with_default_reason():
         try:
             print("=== Phase 7.6: 통계 > 시술 통계 검증 ===")
 
-        # 좌측 GNB → 통계 메뉴 클릭
-        stats_menu = crm_page.locator(
-            "h3:has-text('통계'):visible, a:has-text('통계'):visible, "
-            "span:has-text('통계'):visible"
-        ).first
-        await expect(stats_menu).to_be_visible(timeout=10000)
-        await stats_menu.click()
-        await crm_page.wait_for_load_state("domcontentloaded")
-        await crm_page.wait_for_timeout(1000)
-        print("  ✓ 통계 페이지 진입")
-
-        # 시술 통계 클릭 (UI 변경: 카드 → 리스트 항목)
-        treatment_link = crm_page.locator(
-            "a:has-text('시술 통계'):visible, "
-            "button:has-text('시술 통계'):visible, "
-            "div:has-text('시술 통계'):visible"
-        ).first
-        await expect(treatment_link).to_be_visible(timeout=10000)
-        await treatment_link.click()
-        await crm_page.wait_for_load_state("domcontentloaded")
-        await crm_page.wait_for_timeout(1000)
-        print("  ✓ 시술 통계 자세히 보기 진입")
-
-        # 날짜 필터: 기간 선택 → 오늘 → 기간 검색
-        range_btn = crm_page.locator("button:has(svg[icon='reserveCalender']):visible").first
-        if await range_btn.count() == 0:
-            range_btn = crm_page.locator("button:has(svg):visible").filter(
-                has_text=re.compile(r"\d{1,2}\.\s*\d{1,2}\.\s*\d{1,2}")
+            # 좌측 GNB → 통계 메뉴 클릭
+            stats_menu = crm_page.locator(
+                "h3:has-text('통계'):visible, a:has-text('통계'):visible, "
+                "span:has-text('통계'):visible"
             ).first
-        if await range_btn.count() > 0:
-            await range_btn.click()
-            await crm_page.wait_for_timeout(500)
+            await expect(stats_menu).to_be_visible(timeout=10000)
+            await stats_menu.click()
+            await crm_page.wait_for_load_state("domcontentloaded")
+            await crm_page.wait_for_timeout(1000)
+            print("  ✓ 통계 페이지 진입")
 
-            # "오늘" 버튼
-            today_btn = crm_page.locator("button:has-text('오늘'):visible").first
-            if await today_btn.count() == 0:
-                today_btn = crm_page.get_by_role("button", name="오늘").first
-            if await today_btn.count() > 0:
-                await today_btn.click()
-                await crm_page.wait_for_timeout(300)
+            # 시술 통계 클릭 (UI 변경: 카드 → 리스트 항목)
+            treatment_link = crm_page.locator(
+                "a:has-text('시술 통계'):visible, "
+                "button:has-text('시술 통계'):visible, "
+                "div:has-text('시술 통계'):visible"
+            ).first
+            await expect(treatment_link).to_be_visible(timeout=10000)
+            await treatment_link.click()
+            await crm_page.wait_for_load_state("domcontentloaded")
+            await crm_page.wait_for_timeout(1000)
+            print("  ✓ 시술 통계 자세히 보기 진입")
 
-            # "기간 검색" 버튼
-            search_btn = crm_page.locator("button:has-text('기간 검색'):visible").last
-            if await search_btn.count() > 0:
-                await search_btn.click()
-                try:
-                    await crm_page.wait_for_load_state("networkidle", timeout=15000)
-                except Exception:
-                    pass
-                await crm_page.wait_for_timeout(1000)
-            print("  ✓ 기간 필터 적용")
-        else:
-            print("  ⚠ 기간 선택 버튼 미발견, 기본 필터 사용")
-        await crm_page.screenshot(path=str(SHOT_DIR / "kok_stats_treatment.png"))
+            # 날짜 필터: 기간 선택 → 오늘 → 기간 검색
+            range_btn = crm_page.locator("button:has(svg[icon='reserveCalender']):visible").first
+            if await range_btn.count() == 0:
+                range_btn = crm_page.locator("button:has(svg):visible").filter(
+                    has_text=re.compile(r"\d{1,2}\.\s*\d{1,2}\.\s*\d{1,2}")
+                ).first
+            if await range_btn.count() > 0:
+                await range_btn.click()
+                await crm_page.wait_for_timeout(500)
 
-        # 시술 통계 테이블에서 시술명, 실매출 합계, 총 합계 확인
-        stat_table = crm_page.locator("table:visible").first
-        await expect(stat_table).to_be_visible(timeout=5000)
+                # "오늘" 버튼
+                today_btn = crm_page.locator("button:has-text('오늘'):visible").first
+                if await today_btn.count() == 0:
+                    today_btn = crm_page.get_by_role("button", name="오늘").first
+                if await today_btn.count() > 0:
+                    await today_btn.click()
+                    await crm_page.wait_for_timeout(300)
 
-        stat_body = await stat_table.inner_text()
-        print(f"  [테이블 내용]\n{stat_body[:500]}")
+                # "기간 검색" 버튼
+                search_btn = crm_page.locator("button:has-text('기간 검색'):visible").last
+                if await search_btn.count() > 0:
+                    await search_btn.click()
+                    try:
+                        await crm_page.wait_for_load_state("networkidle", timeout=15000)
+                    except Exception:
+                        pass
+                    await crm_page.wait_for_timeout(1000)
+                print("  ✓ 기간 필터 적용")
+            else:
+                print("  ⚠ 기간 선택 버튼 미발견, 기본 필터 사용")
+            await crm_page.screenshot(path=str(SHOT_DIR / "kok_stats_treatment.png"))
 
-        # 콕예약 A: 시술명 확인
-        assert "E2E 테스트 콕예약 A_수정" in stat_body, "시술 통계에서 'E2E 테스트 콕예약 A_수정' 미발견"
-        print("  ✓ 시술명 확인: E2E 테스트 콕예약 A_수정")
+            # 시술 통계 테이블에서 시술명, 실매출 합계, 총 합계 확인
+            stat_table = crm_page.locator("table:visible").first
+            await expect(stat_table).to_be_visible(timeout=5000)
 
-        # 콕예약 B: 시술명 확인
-        assert "E2E 테스트 콕예약 B" in stat_body, "시술 통계에서 'E2E 테스트 콕예약 B' 미발견"
-        print("  ✓ 시술명 확인: E2E 테스트 콕예약 B")
+            stat_body = await stat_table.inner_text()
+            print(f"  [테이블 내용]\n{stat_body[:500]}")
 
-        # 각 시술의 실매출 합계, 총 합계 검증 (행 기준)
-        rows = stat_table.locator("tbody tr:visible")
-        row_count = await rows.count()
+            # 콕예약 A: 시술명 확인
+            assert "E2E 테스트 콕예약 A_수정" in stat_body, "시술 통계에서 'E2E 테스트 콕예약 A_수정' 미발견"
+            print("  ✓ 시술명 확인: E2E 테스트 콕예약 A_수정")
 
-        async def get_col_value(table, header_text, row):
-            """헤더 텍스트로 컬럼 인덱스 → 해당 행의 셀 값(원 단위) 추출"""
-            header = table.locator(f"thead th:has-text('{header_text}')").first
-            await expect(header).to_be_visible(timeout=3000)
-            col_idx = await header.evaluate(
-                "th => Array.from(th.parentElement.children).indexOf(th) + 1"
-            )
-            cell = row.locator(f"td:nth-child({col_idx})").first
-            await expect(cell).to_be_visible(timeout=3000)
-            text = re.sub(r"\\s+", " ", (await cell.inner_text()).strip())
-            m = re.search(r"([0-9][0-9,]*)\s*원", text)
-            if m:
-                return int(m.group(1).replace(",", ""))
-            m = re.search(r"([0-9][0-9,]*)", text)
-            if m:
-                return int(m.group(1).replace(",", ""))
-            return 0
+            # 콕예약 B: 시술명 확인
+            assert "E2E 테스트 콕예약 B" in stat_body, "시술 통계에서 'E2E 테스트 콕예약 B' 미발견"
+            print("  ✓ 시술명 확인: E2E 테스트 콕예약 B")
 
-        found_a = False
-        found_b = False
-        for i in range(row_count):
-            row = rows.nth(i)
-            row_text = await row.inner_text()
+            # 각 시술의 실매출 합계, 총 합계 검증 (행 기준)
+            rows = stat_table.locator("tbody tr:visible")
+            row_count = await rows.count()
 
-            if "E2E 테스트 콕예약 A_수정" in row_text and not found_a:
-                real_sales = await get_col_value(stat_table, "실 매출 합계", row)
-                total = await get_col_value(stat_table, "총 합계", row)
-                assert real_sales > 0, f"콕예약 A_수정 실매출 합계가 0원"
-                assert real_sales % 70000 == 0, f"콕예약 A_수정 실매출이 70,000원 단위가 아님: {real_sales:,}"
-                print(f"  ✓ 콕예약 A_수정 검증: 실매출 합계={real_sales:,}원, 총 합계={total:,}원")
-                found_a = True
+            async def get_col_value(table, header_text, row):
+                header = table.locator(f"thead th:has-text('{header_text}')").first
+                await expect(header).to_be_visible(timeout=3000)
+                col_idx = await header.evaluate(
+                    "th => Array.from(th.parentElement.children).indexOf(th) + 1"
+                )
+                cell = row.locator(f"td:nth-child({col_idx})").first
+                await expect(cell).to_be_visible(timeout=3000)
+                text = re.sub(r"\\s+", " ", (await cell.inner_text()).strip())
+                m = re.search(r"([0-9][0-9,]*)\s*원", text)
+                if m:
+                    return int(m.group(1).replace(",", ""))
+                m = re.search(r"([0-9][0-9,]*)", text)
+                if m:
+                    return int(m.group(1).replace(",", ""))
+                return 0
 
-            elif "E2E 테스트 콕예약 B" in row_text and not found_b:
-                real_sales = await get_col_value(stat_table, "실 매출 합계", row)
-                total = await get_col_value(stat_table, "총 합계", row)
-                assert real_sales > 0, f"콕예약 B 실매출 합계가 0원"
-                assert real_sales % 70000 == 0, f"콕예약 B 실매출이 70,000원 단위가 아님: {real_sales:,}"
-                print(f"  ✓ 콕예약 B 검증: 실매출 합계={real_sales:,}원, 총 합계={total:,}원")
-                found_b = True
+            found_a = False
+            found_b = False
+            for i in range(row_count):
+                row = rows.nth(i)
+                row_text = await row.inner_text()
 
-        assert found_a, "시술 통계에서 콕예약 A 행 미발견"
-        assert found_b, "시술 통계에서 콕예약 B 행 미발견"
+                if "E2E 테스트 콕예약 A_수정" in row_text and not found_a:
+                    real_sales = await get_col_value(stat_table, "실 매출 합계", row)
+                    total = await get_col_value(stat_table, "총 합계", row)
+                    assert real_sales > 0, f"콕예약 A_수정 실매출 합계가 0원"
+                    assert real_sales % 70000 == 0, f"콕예약 A_수정 실매출이 70,000원 단위가 아님: {real_sales:,}"
+                    print(f"  ✓ 콕예약 A_수정 검증: 실매출 합계={real_sales:,}원, 총 합계={total:,}원")
+                    found_a = True
 
-        await crm_page.screenshot(path=str(SHOT_DIR / "kok_stats_verified.png"))
+                elif "E2E 테스트 콕예약 B" in row_text and not found_b:
+                    real_sales = await get_col_value(stat_table, "실 매출 합계", row)
+                    total = await get_col_value(stat_table, "총 합계", row)
+                    assert real_sales > 0, f"콕예약 B 실매출 합계가 0원"
+                    assert real_sales % 70000 == 0, f"콕예약 B 실매출이 70,000원 단위가 아님: {real_sales:,}"
+                    print(f"  ✓ 콕예약 B 검증: 실매출 합계={real_sales:,}원, 총 합계={total:,}원")
+                    found_b = True
+
+            assert found_a, "시술 통계에서 콕예약 A 행 미발견"
+            assert found_b, "시술 통계에서 콕예약 B 행 미발견"
+
+            await crm_page.screenshot(path=str(SHOT_DIR / "kok_stats_verified.png"))
             print("✓ Phase 7.6 완료\n")
         except Exception as e:
             phase_7_6_failed = True
