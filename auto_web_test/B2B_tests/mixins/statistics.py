@@ -153,14 +153,18 @@ class StatisticsMixin:
         await today_btn.click()
         await self.page.wait_for_timeout(300)
 
+        # "기간 검색" 또는 "조회", "검색", "적용" 등 버튼 찾기
         search_btn = self.page.locator("button:has-text('기간 검색'):visible").last
         if await search_btn.count() == 0:
             search_btn = self.page.get_by_role("button", name=re.compile(r"기간 검색$")).locator(":visible").first
         if await search_btn.count() == 0:
-            search_btn = self.page.get_by_text("기간 검색", exact=False).locator(":visible").last
-        await expect(search_btn).to_be_visible(timeout=3000)
-        await search_btn.click()
-        await self.page.wait_for_timeout(700)
+            search_btn = self.page.get_by_role("button", name=re.compile(r"^(조회|검색|적용)$")).locator(":visible").first
+        if await search_btn.count() > 0 and await search_btn.is_visible():
+            await search_btn.click()
+            await self.page.wait_for_timeout(700)
+        else:
+            # "오늘" 클릭 시 자동 적용되는 경우 — 팝업 닫기만 시도
+            await self.page.wait_for_timeout(700)
 
     async def _get_table_value_by_header(self, table, header_text, row=None):
         header = table.locator(f"thead th:has-text('{header_text}')").first

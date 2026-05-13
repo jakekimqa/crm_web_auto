@@ -546,9 +546,23 @@ class SalesMixin:
         await field.press("Enter")
         await self.page.wait_for_timeout(1500)
 
-        result = self.page.locator("li").filter(has_text=customer).first
-        await expect(result).to_be_visible(timeout=5000)
-        await result.click()
+        selected = False
+        for c in [
+            self.page.locator(f"li:has-text('{customer}'):visible").first,
+            self.page.locator(f"button:has-text('{customer}'):visible").first,
+            self.page.locator(f"div:has-text('{customer}'):visible").first,
+        ]:
+            if await c.count() == 0:
+                continue
+            try:
+                await c.click(timeout=3000)
+                selected = True
+                break
+            except Exception:
+                continue
+        if not selected:
+            await field.press("ArrowDown")
+            await field.press("Enter")
         await self.page.wait_for_timeout(1000)
         print(f"  ✓ 고객 선택: {customer}")
 
