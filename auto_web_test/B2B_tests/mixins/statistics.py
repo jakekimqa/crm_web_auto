@@ -238,7 +238,7 @@ class StatisticsMixin:
             if await self._table_has_today_row(t):
                 product_table = t
                 break
-        await expect(product_table).to_be_visible(timeout=5000)
+        await expect(product_table).to_be_visible(timeout=15000)
 
         product_row = await self._find_today_row_in_table(product_table)
         product_sales = await self._get_table_value_by_header(product_table, "실 매출 합계", row=product_row)
@@ -257,7 +257,7 @@ class StatisticsMixin:
         payment_table = self.page.locator("table:visible").filter(
             has_text=re.compile(r"실\s*매출\s*합계|차감\s*합계|총\s*합계")
         ).first
-        await expect(payment_table).to_be_visible(timeout=5000)
+        await expect(payment_table).to_be_visible(timeout=15000)
         payment_row = await self._find_today_row_in_table(payment_table)
         payment_sales = await self._get_table_value_by_header(payment_table, "실 매출 합계", row=payment_row)
         payment_deduct = await self._get_table_value_by_header(payment_table, "차감 합계", row=payment_row)

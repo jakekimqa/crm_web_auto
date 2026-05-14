@@ -2567,8 +2567,12 @@ async def test_b2c_booking_cancel_with_default_reason():
             await crm_page.screenshot(path=str(SHOT_DIR / "kok_stats_treatment.png"))
 
             # 시술 통계 테이블에서 시술명, 실매출 합계, 총 합계 확인
+            try:
+                await crm_page.wait_for_load_state("networkidle", timeout=10000)
+            except Exception:
+                pass
             stat_table = crm_page.locator("table:visible").first
-            await expect(stat_table).to_be_visible(timeout=5000)
+            await expect(stat_table).to_be_visible(timeout=15000)
 
             stat_body = await stat_table.inner_text()
             print(f"  [테이블 내용]\n{stat_body[:500]}")

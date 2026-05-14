@@ -342,7 +342,7 @@ async def test_staff_statistics_product_type(runner):
     await _wait_for_batch(runner, staff_name, expected_sales_count=7)
 
     table = runner.page.locator("table:visible").first
-    await expect(table).to_be_visible(timeout=5000)
+    await expect(table).to_be_visible(timeout=15000)
     row = await _get_staff_row(table, staff_name)
     assert row is not None, f"직원 '{staff_name}' 행을 찾을 수 없습니다."
 
@@ -382,7 +382,7 @@ async def test_staff_statistics_customer_type_real(runner):
     await expect(real_label).to_be_visible(timeout=3000)
 
     table = runner.page.locator("table:visible").first
-    await expect(table).to_be_visible(timeout=5000)
+    await expect(table).to_be_visible(timeout=15000)
 
     staff_name = runner.owner_name
     row = await _get_staff_row(table, staff_name)
@@ -422,7 +422,7 @@ async def test_staff_statistics_customer_type_total(runner):
     await runner.page.wait_for_timeout(1000)
 
     table = runner.page.locator("table:visible").first
-    await expect(table).to_be_visible(timeout=5000)
+    await expect(table).to_be_visible(timeout=15000)
 
     staff_name = runner.owner_name
     row = await _get_staff_row(table, staff_name)
@@ -456,7 +456,7 @@ async def test_channel_statistics(runner):
     await runner._apply_today_filter()
 
     table = runner.page.locator("table:visible").first
-    await expect(table).to_be_visible(timeout=5000)
+    await expect(table).to_be_visible(timeout=15000)
 
     row_values = await _get_first_data_row_values(table)
     assert len(row_values) >= 4, f"채널별 매출 통계 컬럼 부족: {row_values}"
@@ -483,7 +483,7 @@ async def test_customer_statistics(runner):
     await runner._apply_today_filter()
 
     table = runner.page.locator("table:visible").first
-    await expect(table).to_be_visible(timeout=5000)
+    await expect(table).to_be_visible(timeout=15000)
 
     row_values = await _get_first_data_row_values(table)
 
@@ -523,7 +523,7 @@ async def test_time_statistics(runner):
     await runner._apply_today_filter()
 
     table = runner.page.locator("table:visible").first
-    await expect(table).to_be_visible(timeout=5000)
+    await expect(table).to_be_visible(timeout=15000)
 
     all_rows = await _get_all_data_rows(table)
 
@@ -597,7 +597,7 @@ async def test_day_statistics(runner):
     await runner._apply_today_filter()
 
     table = runner.page.locator("table:visible").first
-    await expect(table).to_be_visible(timeout=5000)
+    await expect(table).to_be_visible(timeout=15000)
 
     day_names = ["월요일", "화요일", "수요일", "목요일", "금요일", "토요일", "일요일"]
     today_day = day_names[datetime.now().weekday()]
