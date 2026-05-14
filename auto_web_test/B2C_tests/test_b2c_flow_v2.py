@@ -2522,11 +2522,10 @@ async def test_b2c_booking_cancel_with_default_reason():
             await crm_page.wait_for_timeout(1000)
             print("  ✓ 통계 페이지 진입")
 
-            # 시술 통계 클릭 (UI 변경: 카드 → 리스트 항목)
+            # 시술 통계 클릭
             treatment_link = crm_page.locator(
                 "a:has-text('시술 통계'):visible, "
-                "button:has-text('시술 통계'):visible, "
-                "div:has-text('시술 통계'):visible"
+                "button:has-text('시술 통계'):visible"
             ).first
             await expect(treatment_link).to_be_visible(timeout=10000)
             await treatment_link.click()
@@ -2571,6 +2570,14 @@ async def test_b2c_booking_cancel_with_default_reason():
                 await crm_page.wait_for_load_state("networkidle", timeout=10000)
             except Exception:
                 pass
+            print(f"  [DEBUG] 현재 URL: {crm_page.url}")
+            table_count = await crm_page.locator("table").count()
+            visible_table_count = await crm_page.locator("table:visible").count()
+            print(f"  [DEBUG] table 요소: {table_count}개, visible: {visible_table_count}개")
+            if visible_table_count == 0:
+                body_html = await crm_page.locator("body").inner_html()
+                print(f"  [DEBUG] body HTML (앞 1000자):\n{body_html[:1000]}")
+                await crm_page.screenshot(path=str(SHOT_DIR / "kok_stats_treatment_debug.png"))
             stat_table = crm_page.locator("table:visible").first
             await expect(stat_table).to_be_visible(timeout=15000)
 
