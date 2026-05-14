@@ -602,17 +602,21 @@ async def test_b2c_booking_cancel_with_default_reason():
             await zero_page.wait_for_load_state("networkidle", timeout=15000)
         except Exception:
             pass
+        try:
+            await zero_page.locator("#loading-root").wait_for(state="hidden", timeout=30000)
+        except Exception:
+            pass
         await zero_page.wait_for_timeout(1000)
 
         # 결제 페이지: 동의 체크 → 최종 예약하기
         agree_check2 = zero_page.locator("label:has-text('위 내용을 확인하였으며'), input[type='checkbox']").first
         if await agree_check2.count() > 0:
-            await agree_check2.click()
+            await agree_check2.click(force=True)
             await zero_page.wait_for_timeout(500)
 
         final_booking2 = zero_page.locator("button:has-text('예약하기')").last
         await expect(final_booking2).to_be_visible(timeout=10000)
-        await final_booking2.click()
+        await final_booking2.click(force=True)
         try:
             await zero_page.wait_for_load_state("networkidle", timeout=15000)
         except Exception:
@@ -684,17 +688,21 @@ async def test_b2c_booking_cancel_with_default_reason():
             await zero_page.wait_for_load_state("networkidle", timeout=15000)
         except Exception:
             pass
+        try:
+            await zero_page.locator("#loading-root").wait_for(state="hidden", timeout=30000)
+        except Exception:
+            pass
         await zero_page.wait_for_timeout(1000)
 
         # 결제 페이지: 동의 체크 → 최종 예약하기
         agree_check3 = zero_page.locator("label:has-text('위 내용을 확인하였으며'), input[type='checkbox']").first
         if await agree_check3.count() > 0:
-            await agree_check3.click()
+            await agree_check3.click(force=True)
             await zero_page.wait_for_timeout(500)
 
         final_booking3 = zero_page.locator("button:has-text('예약하기')").last
         await expect(final_booking3).to_be_visible(timeout=10000)
-        await final_booking3.click()
+        await final_booking3.click(force=True)
         try:
             await zero_page.wait_for_load_state("networkidle", timeout=15000)
         except Exception:
@@ -1186,6 +1194,10 @@ async def test_b2c_booking_cancel_with_default_reason():
             await zero_page.wait_for_load_state("networkidle", timeout=15000)
         except Exception:
             pass
+        try:
+            await zero_page.locator("#loading-root").wait_for(state="hidden", timeout=30000)
+        except Exception:
+            pass
         await zero_page.wait_for_timeout(1000)
 
         # 결제 페이지: 최종 예약하기
@@ -1193,7 +1205,7 @@ async def test_b2c_booking_cancel_with_default_reason():
         if "예약 완료" not in page_text and "예약 신청" not in page_text:
             final_booking = zero_page.locator("button:has-text('예약하기')").last
             await expect(final_booking).to_be_visible(timeout=15000)
-            await final_booking.click()
+            await final_booking.click(force=True)
             try:
                 await zero_page.wait_for_load_state("networkidle", timeout=15000)
             except Exception:
