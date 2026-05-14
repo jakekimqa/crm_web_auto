@@ -85,7 +85,7 @@ async def test_b2c_booking_cancel_with_default_reason():
         await runner.setup()
 
         # 로그인 → 바로 샵 생성
-        await runner.page.goto(runner.base_url)
+        await runner.page.goto(runner.base_url, wait_until="domcontentloaded")
         await runner.page.fill('input[name="id"], input[type="text"]', runner.correct_id)
         await runner.page.fill('input[name="password"], input[type="password"]', runner.correct_password)
         await runner.page.click('button[type="submit"], .login-btn')
@@ -185,7 +185,7 @@ async def test_b2c_booking_cancel_with_default_reason():
         news_content = f"자동화 테스트 샵 소식 상세 내용입니다. ({runner.mmdd})"
         test_image_path = str(Path(__file__).parent / "test_image.png")
 
-        await runner.page.goto(f"{CRM_BASE_URL}/b2c/shop-news/new")
+        await runner.page.goto(f"{CRM_BASE_URL}/b2c/shop-news/new", wait_until="domcontentloaded")
         try:
             await runner.page.wait_for_load_state("networkidle", timeout=15000)
         except Exception:
@@ -245,7 +245,7 @@ async def test_b2c_booking_cancel_with_default_reason():
             pass
 
         # 소식 목록 페이지로 이동하여 확인
-        await runner.page.goto(f"{CRM_BASE_URL}/b2c/shop-news?fromMenu=true")
+        await runner.page.goto(f"{CRM_BASE_URL}/b2c/shop-news?fromMenu=true", wait_until="domcontentloaded")
         try:
             await runner.page.wait_for_load_state("networkidle", timeout=15000)
         except Exception:
@@ -268,7 +268,7 @@ async def test_b2c_booking_cancel_with_default_reason():
         staff_context.set_default_navigation_timeout(60000)
         staff_page = await staff_context.new_page()
         try:
-            await staff_page.goto(f"{CRM_BASE_URL}/signin")
+            await staff_page.goto(f"{CRM_BASE_URL}/signin", wait_until="domcontentloaded")
             try:
                 await staff_page.wait_for_load_state("networkidle", timeout=15000)
             except Exception:
@@ -537,7 +537,7 @@ async def test_b2c_booking_cancel_with_default_reason():
 
         # ── B2C 샵 소식 검증 (샵 페이지 진입 시 지도 아래 노출) ──
         print("  --- B2C 샵 소식 검증 ---")
-        await zero_page.goto(f"{ZERO_BASE_URL}/shop/{shop_id}")
+        await zero_page.goto(f"{ZERO_BASE_URL}/shop/{shop_id}", wait_until="domcontentloaded")
         try:
             await zero_page.wait_for_load_state("networkidle", timeout=15000)
         except Exception:
@@ -555,7 +555,7 @@ async def test_b2c_booking_cancel_with_default_reason():
 
         # ── 두 번째 예약: 컷 > 남성컷 ──
         print("  --- 두 번째 예약: 컷 > 남성컷 ---")
-        await zero_page.goto(f"{ZERO_BASE_URL}/shop/{shop_id}")
+        await zero_page.goto(f"{ZERO_BASE_URL}/shop/{shop_id}", wait_until="domcontentloaded")
         try:
             await zero_page.wait_for_load_state("networkidle", timeout=15000)
         except Exception:
@@ -659,7 +659,7 @@ async def test_b2c_booking_cancel_with_default_reason():
 
         # ── 세 번째 예약: 담당자 테스트_직원계정1 ──
         print("  --- 세 번째 예약: 담당자 테스트_직원계정1 ---")
-        await zero_page.goto(f"{ZERO_BASE_URL}/shop/{shop_id}")
+        await zero_page.goto(f"{ZERO_BASE_URL}/shop/{shop_id}", wait_until="domcontentloaded")
         try:
             await zero_page.wait_for_load_state("networkidle", timeout=15000)
         except Exception:
@@ -750,7 +750,7 @@ async def test_b2c_booking_cancel_with_default_reason():
         await _switch_shop(crm_page, shop_name)
 
         # 캘린더 이동
-        await crm_page.goto(f"{CRM_BASE_URL}/book/calendar")
+        await crm_page.goto(f"{CRM_BASE_URL}/book/calendar", wait_until="domcontentloaded")
         try:
             await crm_page.wait_for_load_state("networkidle", timeout=15000)
         except Exception:
@@ -956,7 +956,7 @@ async def test_b2c_booking_cancel_with_default_reason():
         await crm_page.wait_for_timeout(2000)
 
         # 취소된 예약 상세로 직접 이동
-        await crm_page.goto(first_detail_url)
+        await crm_page.goto(first_detail_url, wait_until="domcontentloaded")
         try:
             await crm_page.wait_for_load_state("networkidle", timeout=15000)
         except Exception:
@@ -985,7 +985,7 @@ async def test_b2c_booking_cancel_with_default_reason():
 
         # ── Phase 4.5: 두 번째 예약 매출 등록 ──
         print("=== Phase 4.5: 두 번째 예약 매출 등록 ===")
-        await crm_page.goto(f"{CRM_BASE_URL}/book/calendar")
+        await crm_page.goto(f"{CRM_BASE_URL}/book/calendar", wait_until="domcontentloaded")
         try:
             await crm_page.wait_for_load_state("networkidle", timeout=15000)
         except Exception:
@@ -1112,7 +1112,7 @@ async def test_b2c_booking_cancel_with_default_reason():
         print("  ✓ 매출 등록 완료")
 
         # 매출 등록 완료 확인
-        await crm_page.goto(second_detail_url)
+        await crm_page.goto(second_detail_url, wait_until="domcontentloaded")
         try:
             await crm_page.wait_for_load_state("networkidle", timeout=15000)
         except Exception:
@@ -1130,7 +1130,7 @@ async def test_b2c_booking_cancel_with_default_reason():
         print("=== Phase 4.6: 확인 후 확정 예약 ===")
 
         # Step 1: CRM 예약 방식 변경 → "담당자 확인 후 예약 확정"
-        await crm_page.goto(f"{CRM_BASE_URL}/b2c/setting")
+        await crm_page.goto(f"{CRM_BASE_URL}/b2c/setting", wait_until="domcontentloaded")
         try:
             await crm_page.wait_for_load_state("networkidle", timeout=15000)
         except Exception:
@@ -1170,7 +1170,7 @@ async def test_b2c_booking_cancel_with_default_reason():
 
         # Step 2: B2C 예약 진행
         print("  --- B2C 확인 후 확정 예약 진행 ---")
-        await zero_page.goto(f"{ZERO_BASE_URL}/shop/{shop_id}")
+        await zero_page.goto(f"{ZERO_BASE_URL}/shop/{shop_id}", wait_until="domcontentloaded")
         try:
             await zero_page.wait_for_load_state("networkidle", timeout=15000)
         except Exception:
@@ -1260,7 +1260,7 @@ async def test_b2c_booking_cancel_with_default_reason():
         await _switch_shop(crm_page, shop_name)
 
         d = datetime.now() + timedelta(days=1)
-        await crm_page.goto(f"{CRM_BASE_URL}/book/calendar")
+        await crm_page.goto(f"{CRM_BASE_URL}/book/calendar", wait_until="domcontentloaded")
         try:
             await crm_page.wait_for_load_state("networkidle", timeout=15000)
         except Exception:
@@ -1357,7 +1357,7 @@ async def test_b2c_booking_cancel_with_default_reason():
 
         # 확정 후 캘린더로 이동될 수 있으므로 다시 예약 상세로 진입
         if "detail" not in crm_page.url:
-            await crm_page.goto(confirm_detail_url)
+            await crm_page.goto(confirm_detail_url, wait_until="domcontentloaded")
             try:
                 await crm_page.wait_for_load_state("networkidle", timeout=15000)
             except Exception:
@@ -1392,7 +1392,7 @@ async def test_b2c_booking_cancel_with_default_reason():
         print("  ✓ 매출 등록 완료")
 
         # 매출 등록 완료 확인
-        await crm_page.goto(confirm_detail_url)
+        await crm_page.goto(confirm_detail_url, wait_until="domcontentloaded")
         await crm_page.wait_for_load_state("domcontentloaded")
         await crm_page.wait_for_timeout(2000)
         detail_body = await crm_page.locator("body").inner_text()
@@ -1401,7 +1401,7 @@ async def test_b2c_booking_cancel_with_default_reason():
         await crm_page.screenshot(path=str(SHOT_DIR / "phase46_04_sales_done.png"))
 
         # 예약 방식을 다시 "즉시 예약 확정"으로 복원
-        await crm_page.goto(f"{CRM_BASE_URL}/b2c/setting")
+        await crm_page.goto(f"{CRM_BASE_URL}/b2c/setting", wait_until="domcontentloaded")
         try:
             await crm_page.wait_for_load_state("networkidle", timeout=15000)
         except Exception:
@@ -1869,7 +1869,7 @@ async def test_b2c_booking_cancel_with_default_reason():
         if "dev-front-zero.gongbiz.kr" in original_edit_url:
             cok_id = original_edit_url.rstrip("/").split("/")[-1]
             qa_url = f"https://qa-zero.gongbiz.kr/cok/{cok_id}"
-            await edit_b2c.goto(qa_url)
+            await edit_b2c.goto(qa_url, wait_until="domcontentloaded")
             try:
                 await edit_b2c.wait_for_load_state("networkidle", timeout=15000)
             except Exception:
@@ -1968,7 +1968,7 @@ async def test_b2c_booking_cancel_with_default_reason():
             if "dev-front-zero.gongbiz.kr" in original_url:
                 cok_id = original_url.rstrip("/").split("/")[-1]
                 qa_url = f"https://qa-zero.gongbiz.kr/cok/{cok_id}"
-                await b2c_page.goto(qa_url)
+                await b2c_page.goto(qa_url, wait_until="domcontentloaded")
                 try:
                     await b2c_page.wait_for_load_state("networkidle", timeout=15000)
                 except Exception:
@@ -2107,7 +2107,7 @@ async def test_b2c_booking_cancel_with_default_reason():
 
                 # 같은 URL로 재진입 → 중복 신고 테스트
                 print(f"  --- 중복 신고 테스트 ---")
-                await b2c_page.goto(kok_url)
+                await b2c_page.goto(kok_url, wait_until="domcontentloaded")
                 try:
                     await b2c_page.wait_for_load_state("networkidle", timeout=15000)
                 except Exception:
@@ -2149,7 +2149,7 @@ async def test_b2c_booking_cancel_with_default_reason():
                 await b2c_page.screenshot(path=str(SHOT_DIR / f"{shot_prefix}_report_dup.png"))
 
                 # 콕예약 페이지로 돌아가서 예약 진행
-                await b2c_page.goto(kok_url)
+                await b2c_page.goto(kok_url, wait_until="domcontentloaded")
                 try:
                     await b2c_page.wait_for_load_state("networkidle", timeout=15000)
                 except Exception:
@@ -2328,7 +2328,7 @@ async def test_b2c_booking_cancel_with_default_reason():
             print(f"\n--- CRM 매출 등록: {kok_name} ---")
 
             # 캘린더 페이지 이동
-            await crm_page.goto(f"{CRM_BASE_URL}/book/calendar")
+            await crm_page.goto(f"{CRM_BASE_URL}/book/calendar", wait_until="domcontentloaded")
             try:
                 await crm_page.wait_for_load_state("networkidle", timeout=15000)
             except Exception:
