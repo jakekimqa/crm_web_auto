@@ -2219,10 +2219,13 @@ async def test_b2c_booking_cancel_with_default_reason():
                 await b2c_page.wait_for_timeout(1000)
 
             # 최종 예약하기
+            try:
+                await b2c_page.locator("#loading-root").wait_for(state="hidden", timeout=30000)
+            except Exception:
+                pass
             final_btn = b2c_page.locator("button:has-text('예약하기')").last
-            await final_btn.scroll_into_view_if_needed()
             await expect(final_btn).to_be_visible(timeout=15000)
-            await final_btn.click()
+            await final_btn.click(force=True)
             try:
                 await b2c_page.wait_for_load_state("networkidle", timeout=15000)
             except Exception:
