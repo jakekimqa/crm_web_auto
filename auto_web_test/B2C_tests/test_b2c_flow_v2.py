@@ -265,6 +265,7 @@ async def test_b2c_booking_cancel_with_default_reason():
         # 직원 계정으로 별도 브라우저 로그인
         staff_browser = await runner.playwright.chromium.launch(headless=runner.headless)
         staff_context = await staff_browser.new_context(viewport={"width": 1440, "height": 900})
+        staff_context.set_default_navigation_timeout(60000)
         staff_page = await staff_context.new_page()
         try:
             await staff_page.goto(f"{CRM_BASE_URL}/signin")
@@ -378,6 +379,7 @@ async def test_b2c_booking_cancel_with_default_reason():
         print("=== Phase 2: B2C 예약 ===")
         crm_page = await runner.context.new_page()
         zero_context = await runner.browser.new_context(viewport={"width": 430, "height": 932})
+        zero_context.set_default_navigation_timeout(60000)
         zero_page = await zero_context.new_page()
 
         await crm_page.bring_to_front()
