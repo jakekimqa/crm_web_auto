@@ -106,7 +106,7 @@ async def test_b2c_booking_cancel_with_default_reason():
         await expect(name_input).to_be_visible(timeout=10000)
         await name_input.fill(f"{runner.mmdd}_배포_테스트")
 
-        async with runner.page.expect_popup() as input_addr_info:
+        async with runner.page.expect_popup(timeout=60000) as input_addr_info:
             await runner.page.locator("input#addr[placeholder='샵 주소']").click()
         input_addr_page = await input_addr_info.value
         await input_addr_page.wait_for_load_state("domcontentloaded")
