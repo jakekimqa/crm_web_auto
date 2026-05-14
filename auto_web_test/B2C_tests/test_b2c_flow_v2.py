@@ -402,14 +402,20 @@ async def test_b2c_booking_cancel_with_default_reason():
         # ── 로그인 전 기능 테스트: 좋아요 → 앱 다운로드 모달 검증 ──
         print("  --- 로그인 전 기능 테스트 ---")
         await zero_page.goto(f"{ZERO_BASE_URL}/main", wait_until="domcontentloaded")
-        await zero_page.wait_for_load_state("networkidle", timeout=15000)
+        try:
+            await zero_page.wait_for_load_state("networkidle", timeout=15000)
+        except Exception:
+            pass
         await zero_page.wait_for_timeout(1000)
 
         # 1) 매거진 첫 번째 아이템 클릭
         magazine_item = zero_page.locator('a[href^="/magazine/"]').first
         await expect(magazine_item).to_be_visible(timeout=10000)
         await magazine_item.click()
-        await zero_page.wait_for_load_state("networkidle", timeout=15000)
+        try:
+            await zero_page.wait_for_load_state("networkidle", timeout=15000)
+        except Exception:
+            pass
         await zero_page.wait_for_timeout(1000)
         print("  ✓ 매거진 상세 진입")
 
@@ -437,14 +443,20 @@ async def test_b2c_booking_cancel_with_default_reason():
 
         # 4) 메인으로 돌아가기
         await zero_page.go_back()
-        await zero_page.wait_for_load_state("networkidle", timeout=15000)
+        try:
+            await zero_page.wait_for_load_state("networkidle", timeout=15000)
+        except Exception:
+            pass
         await zero_page.wait_for_timeout(1000)
 
         # 5) 콕예약 탭 클릭
         cok_tab = zero_page.locator('a[href="/cok"]')
         await expect(cok_tab).to_be_visible(timeout=5000)
         await cok_tab.click()
-        await zero_page.wait_for_load_state("networkidle", timeout=15000)
+        try:
+            await zero_page.wait_for_load_state("networkidle", timeout=15000)
+        except Exception:
+            pass
         await zero_page.wait_for_timeout(1000)
         print("  ✓ 콕예약 탭 진입")
 
@@ -452,7 +464,10 @@ async def test_b2c_booking_cancel_with_default_reason():
         cok_item = zero_page.locator('a[id^="cok-list-"]').first
         await expect(cok_item).to_be_visible(timeout=10000)
         await cok_item.click()
-        await zero_page.wait_for_load_state("networkidle", timeout=15000)
+        try:
+            await zero_page.wait_for_load_state("networkidle", timeout=15000)
+        except Exception:
+            pass
         await zero_page.wait_for_timeout(1000)
         print("  ✓ 콕예약 상세 진입")
 
@@ -476,13 +491,19 @@ async def test_b2c_booking_cancel_with_default_reason():
 
         # 9) 뒤로가기 → 예약내역 탭 → 마이 탭
         await zero_page.go_back()
-        await zero_page.wait_for_load_state("networkidle", timeout=15000)
+        try:
+            await zero_page.wait_for_load_state("networkidle", timeout=15000)
+        except Exception:
+            pass
         await zero_page.wait_for_timeout(500)
 
         booking_tab = zero_page.locator('a[href="/bookings"]')
         await expect(booking_tab).to_be_visible(timeout=5000)
         await booking_tab.click()
-        await zero_page.wait_for_load_state("networkidle", timeout=15000)
+        try:
+            await zero_page.wait_for_load_state("networkidle", timeout=15000)
+        except Exception:
+            pass
         await zero_page.wait_for_timeout(1000)
 
         app_btn = zero_page.locator('button[data-track-id="web_app_download_click"]', has_text="공비서 앱에서 확인하기")
@@ -492,7 +513,10 @@ async def test_b2c_booking_cancel_with_default_reason():
         my_tab = zero_page.locator('a[href="/my"]')
         await expect(my_tab).to_be_visible(timeout=5000)
         await my_tab.click()
-        await zero_page.wait_for_load_state("networkidle", timeout=15000)
+        try:
+            await zero_page.wait_for_load_state("networkidle", timeout=15000)
+        except Exception:
+            pass
         await zero_page.wait_for_timeout(1000)
         print("  ✓ 마이 탭 진입")
 
@@ -500,7 +524,10 @@ async def test_b2c_booking_cancel_with_default_reason():
         login_link = zero_page.locator('a[href*="/login"]', has_text="로그인 / 회원가입")
         await expect(login_link).to_be_visible(timeout=5000)
         await login_link.click()
-        await zero_page.wait_for_load_state("networkidle", timeout=15000)
+        try:
+            await zero_page.wait_for_load_state("networkidle", timeout=15000)
+        except Exception:
+            pass
         await zero_page.wait_for_timeout(1000)
         print("  ✓ 로그인 페이지 진입")
         print("  --- 로그인 전 기능 테스트 완료 ---\n")
@@ -2197,7 +2224,10 @@ async def test_b2c_booking_cancel_with_default_reason():
                     await popup.get_by_role("button", name="로그인").first.click()
                     try:
                         await popup.wait_for_load_state("networkidle")
-                        await popup.wait_for_load_state("networkidle")
+                        try:
+                            await popup.wait_for_load_state("networkidle")
+                        except Exception:
+                            pass
                         agree_btn = popup.locator("button:has-text('동의하고 계속하기')")
                         if await agree_btn.count() > 0 and await agree_btn.is_visible():
                             await agree_btn.click()
