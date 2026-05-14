@@ -780,9 +780,16 @@ async def test_b2c_booking_cancel_with_default_reason():
                 btn_cls = "fc-next-button" if current_day < d.day else "fc-prev-button"
             else:
                 btn_cls = "fc-next-button"
+            for _ in range(3):
+                dim = crm_page.locator("#modal-dimmer.isActiveDimmed:visible").first
+                if await dim.count() > 0:
+                    await dim.click(force=True)
+                    await crm_page.wait_for_timeout(500)
+                else:
+                    break
             nav_btn = crm_page.locator(f"button.{btn_cls}").first
             await expect(nav_btn).to_be_visible(timeout=5000)
-            await nav_btn.click()
+            await nav_btn.click(force=True)
             try:
                 await crm_page.wait_for_load_state("networkidle", timeout=10000)
             except Exception:
