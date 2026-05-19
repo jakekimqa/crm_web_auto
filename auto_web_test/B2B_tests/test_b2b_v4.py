@@ -646,8 +646,182 @@ async def _get_chart_customer_names(runner):
     return names
 
 
+# ── 고객 상세 탭 상세 검증 ──
+
+async def test_c1_detail_tabs(runner):
+    """자동화_1 상세 — 매출/예약/정액권/패밀리 탭 검증 + 패밀리 삭제"""
+    customer_1 = f"자동화_{runner.mmdd}_1"
+    customer_3 = f"자동화_{runner.mmdd}_3"
+    detail = await runner.open_customer_detail_from_list(customer_1)
+    try:
+        # ── 매출 탭 ──
+        sales_tab = detail.locator('[role="tab"]:has-text("매출")').first
+        await expect(sales_tab).to_be_visible(timeout=5000)
+        await sales_tab.click()
+        await detail.wait_for_timeout(1500)
+
+        label = detail.locator("h5:has-text('정액권 판매')").first
+        await expect(label).to_be_visible(timeout=5000)
+        amount_el = label.locator("xpath=following-sibling::h3").first
+        if await amount_el.count() == 0:
+            amount_el = label.locator("xpath=../..").first.locator("h3").first
+        amount_text = await amount_el.inner_text()
+        assert "200,000" in amount_text, f"정액권 판매 금액 검증 실패: '{amount_text}'"
+        print(f"✓ {customer_1} 매출 탭 — 정액권 판매: {amount_text}")
+
+        # ── 예약 탭 ──
+        reservation_tab = detail.locator('[role="tab"]:has-text("예약")').first
+        await reservation_tab.click()
+        await detail.wait_for_timeout(1500)
+
+        first_row = detail.locator("tbody tr.data-row").first
+        await expect(first_row).to_be_visible(timeout=5000)
+        cells = first_row.locator("td")
+
+        date_text = await cells.nth(0).inner_text()
+        assert "오후 4:00" in date_text, f"예약 일시 검증 실패: '{date_text}'"
+        print(f"✓ {customer_1} 예약 탭 — 일시: {date_text.strip()}")
+
+        status_text = await cells.nth(1).inner_text()
+        assert "매출등록" in status_text, f"예약 상태 검증 실패: '{status_text}'"
+        print(f"✓ {customer_1} 예약 탭 — 상태: {status_text.strip()}")
+
+        treatment_text = await cells.nth(2).inner_text()
+        assert "젤 기본" in treatment_text, f"시술명 검증 실패: '{treatment_text}'"
+        print(f"✓ {customer_1} 예약 탭 — 시술: {treatment_text.strip()}")
+
+        # ── 정액권 탭 ──
+        membership_tab = detail.locator('[role="tab"]:has-text("정액권")').first
+        await membership_tab.click()
+        await detail.wait_for_timeout(1500)
+
+        balance_label = detail.locator("h5:has-text('패밀리 정액권 합계')").first
+        await expect(balance_label).to_be_visible(timeout=5000)
+        balance_el = balance_label.locator("xpath=following-sibling::h2").first
+        if await balance_el.count() == 0:
+            balance_el = balance_label.locator("xpath=../..").first.locator("h2").first
+        balance_text = await balance_el.inner_text()
+        assert "190,000" in balance_text, f"패밀리 정액권 합계 검증 실패: '{balance_text}'"
+        print(f"✓ {customer_1} 정액권 탭 — 패밀리 정액권 합계: {balance_text}")
+
+        usage_row = detail.locator("tbody tr.data-row:has-text('케어 결제')").first
+        await expect(usage_row).to_be_visible(timeout=5000)
+        row_text = await usage_row.inner_text()
+
+        assert "-10,000" in row_text, f"증감 금액 검증 실패: '{row_text}'"
+        print(f"✓ {customer_1} 정액권 탭 — 증감: -10,000원")
+
+        assert customer_3 in row_text, f"사용 고객 검증 실패: '{row_text}'"
+        print(f"✓ {customer_1} 정액권 탭 — 사용 고객: {customer_3}")
+
+        last_cell = usage_row.locator("td").last
+        remaining_text = await last_cell.inner_text()
+        assert "190,000" in remaining_text, f"잔여 금액 검증 실패: '{remaining_text}'"
+        print(f"✓ {customer_1} 정액권 탭 — 잔여 금액: {remaining_text.strip()}")
+
+        # ── 패밀리 탭: 멤버 + 사용내역 확인 ──
+        family_tab = detail.locator('[role="tab"]:has-text("패밀리")').first
+        await family_tab.click()
+        await detail.wait_for_timeout(1500)
+
+        body_text = await detail.locator("body").inner_text()
+        assert customer_1 in body_text, f"패밀리 멤버 '{customer_1}' 미노출"
+        print(f"✓ {customer_1} 패밀리 탭 — 멤버: {customer_1}")
+        assert customer_3 in body_text, f"패밀리 멤버 '{customer_3}' 미노출"
+        print(f"✓ {customer_1} 패밀리 탭 — 멤버: {customer_3}")
+        assert "케어 결제" in body_text or customer_3 in body_text, \
+            f"패밀리 탭에서 {customer_3} 사용 내역 미노출"
+        print(f"✓ {customer_1} 패밀리 탭 — {customer_3} 사용 내역 확인")
+
+        # ── 패밀리 삭제 ──
+        family_card = detail.locator(f"div:has(h3:has-text('{customer_3}'))").filter(
+            has=detail.locator("button:has-text('패밀리 설정')")
+        ).first
+        await expect(family_card).to_be_visible(timeout=5000)
+        await family_card.locator("button:has-text('패밀리 설정')").first.click()
+        await detail.wait_for_timeout(1000)
+
+        leave_btn = detail.locator("button:has-text('패밀리 탈퇴')").first
+        await expect(leave_btn).to_be_visible(timeout=5000)
+        await leave_btn.click()
+        await detail.wait_for_timeout(1000)
+
+        delete_btn = detail.locator("button:has-text('패밀리 삭제')").first
+        await expect(delete_btn).to_be_visible(timeout=5000)
+        await delete_btn.click()
+        await detail.wait_for_timeout(2000)
+
+        guide_text = detail.locator("p:has-text('패밀리 기능은 샵에서 판매한 정액권을')").first
+        await expect(guide_text).to_be_visible(timeout=10000)
+        print(f"✓ {customer_1} 패밀리 탭 — 패밀리 삭제 완료, 안내 문구 노출 확인")
+    finally:
+        if detail is not runner.page and not detail.is_closed():
+            await detail.close()
+
+
+async def test_c2_detail_tabs(runner):
+    """자동화_2 상세 — 매출/예약/티켓 탭 검증"""
+    customer_2 = f"자동화_{runner.mmdd}_2"
+    detail = await runner.open_customer_detail_from_list(customer_2)
+    try:
+        # ── 매출 탭 ──
+        sales_tab = detail.locator('[role="tab"]:has-text("매출")').first
+        await expect(sales_tab).to_be_visible(timeout=5000)
+        await sales_tab.click()
+        await detail.wait_for_timeout(1500)
+
+        label = detail.locator("h5:has-text('티켓 판매')").first
+        await expect(label).to_be_visible(timeout=5000)
+        amount_el = label.locator("xpath=following-sibling::h3").first
+        if await amount_el.count() == 0:
+            amount_el = label.locator("xpath=../..").first.locator("h3").first
+        amount_text = await amount_el.inner_text()
+        assert "100,000" in amount_text, f"티켓 판매 금액 검증 실패: '{amount_text}'"
+        print(f"✓ {customer_2} 매출 탭 — 티켓 판매: {amount_text}")
+
+        # ── 예약 탭 ──
+        reservation_tab = detail.locator('[role="tab"]:has-text("예약")').first
+        await reservation_tab.click()
+        await detail.wait_for_timeout(1500)
+
+        first_row = detail.locator("tbody tr.data-row").first
+        await expect(first_row).to_be_visible(timeout=5000)
+        cells = first_row.locator("td")
+
+        date_text = await cells.nth(0).inner_text()
+        assert "오후 5:00" in date_text, f"예약 일시 검증 실패: '{date_text}'"
+        print(f"✓ {customer_2} 예약 탭 — 일시: {date_text.strip()}")
+
+        status_text = await cells.nth(1).inner_text()
+        assert "매출등록" in status_text, f"예약 상태 검증 실패: '{status_text}'"
+        print(f"✓ {customer_2} 예약 탭 — 상태: {status_text.strip()}")
+
+        # ── 티켓 탭 ──
+        ticket_tab = detail.locator('[role="tab"]:has-text("티켓")').first
+        await ticket_tab.click()
+        await detail.wait_for_timeout(1500)
+
+        body_text = await detail.locator("body").inner_text()
+        assert "10만원권" in body_text, f"티켓명 검증 실패: '10만원권' 미노출"
+        print(f"✓ {customer_2} 티켓 탭 — 티켓명: 10만원권")
+
+        ticket_row = detail.locator("tr.data-row:has-text('10만원권')").first
+        if await ticket_row.count() > 0:
+            row_text = await ticket_row.inner_text()
+            print(f"✓ {customer_2} 티켓 탭 — 보유 티켓 내역: {row_text.strip()}")
+        else:
+            ticket_card = detail.locator("div:has-text('10만원권')").first
+            card_text = await ticket_card.inner_text()
+            print(f"✓ {customer_2} 티켓 탭 — 보유 티켓 내역: {card_text.strip()}")
+    finally:
+        if detail is not runner.page and not detail.is_closed():
+            await detail.close()
+
+
+# ── 고객 차트 필터 ──
+
 async def test_customer_chart_filter_procedure(runner):
-    """고객 차트 — 받은 시술 필터 (손 > 젤 기본 → 자동화_1, 손 > 케어 → 자동화_3)"""
+    """고객 차트 — 받은 시술 필터 (손 > 젤 기본 → 자동화_1, 손 > 케어 → 자동화_3, 티켓 > 10만원권 → 자동화_2)"""
     await runner.focus_main_page()
     await runner._open_customer_chart()
 
@@ -662,19 +836,19 @@ async def test_customer_chart_filter_procedure(runner):
     await runner.page.wait_for_timeout(700)
 
     # 그룹: 손
-    group_select = runner.page.locator("#cosmeticGroup button[data-testid='select-toggle-button']").first
+    group_select = runner.page.locator("#receivedItemGroup button[data-testid='select-toggle-button']").first
     await expect(group_select).to_be_visible(timeout=5000)
     await group_select.click()
     await runner.page.wait_for_timeout(500)
-    await runner.page.locator("#cosmeticGroup li:has-text('손')").first.click()
+    await runner.page.locator("#receivedItemGroup li:has-text('손')").first.click()
     await runner.page.wait_for_timeout(500)
 
     # 시술: 젤 기본
-    item_select = runner.page.locator("#cosmeticItem button[data-testid='select-toggle-button']").first
+    item_select = runner.page.locator("#receivedItem button[data-testid='select-toggle-button']").first
     await expect(item_select).to_be_visible(timeout=5000)
     await item_select.click()
     await runner.page.wait_for_timeout(500)
-    await runner.page.locator("#cosmeticItem li:has-text('젤 기본')").first.click()
+    await runner.page.locator("#receivedItem li:has-text('젤 기본')").first.click()
     await runner.page.wait_for_timeout(1000)
 
     customer_1 = f"자동화_{runner.mmdd}_1"
@@ -683,17 +857,37 @@ async def test_customer_chart_filter_procedure(runner):
     print(f"✓ 받은 시술 필터 (손 > 젤 기본) → {customer_1} 노출 확인")
 
     # 케어 검증
-    item_select2 = runner.page.locator("#cosmeticItem button[data-testid='select-toggle-button']").first
+    item_select2 = runner.page.locator("#receivedItem button[data-testid='select-toggle-button']").first
     await expect(item_select2).to_be_visible(timeout=5000)
     await item_select2.click()
     await runner.page.wait_for_timeout(500)
-    await runner.page.locator("#cosmeticItem li:has-text('케어')").first.click()
+    await runner.page.locator("#receivedItem li:has-text('케어')").first.click()
     await runner.page.wait_for_timeout(1000)
 
     customer_3 = f"자동화_{runner.mmdd}_3"
     names = await _get_chart_customer_names(runner)
     assert customer_3 in names, f"받은 시술(케어) 필터 결과에 '{customer_3}' 미노출 (목록: {names})"
     print(f"✓ 받은 시술 필터 (손 > 케어) → {customer_3} 노출 확인")
+
+    # 티켓 > 10만원권 → 자동화_2 검증
+    group_select3 = runner.page.locator("#receivedItemGroup button[data-testid='select-toggle-button']").first
+    await expect(group_select3).to_be_visible(timeout=5000)
+    await group_select3.click()
+    await runner.page.wait_for_timeout(500)
+    await runner.page.locator("#receivedItemGroup li:has-text('티켓')").first.click()
+    await runner.page.wait_for_timeout(500)
+
+    item_select3 = runner.page.locator("#receivedItem button[data-testid='select-toggle-button']").first
+    await expect(item_select3).to_be_visible(timeout=5000)
+    await item_select3.click()
+    await runner.page.wait_for_timeout(500)
+    await runner.page.locator("#receivedItem li:has-text('10만원권')").first.click()
+    await runner.page.wait_for_timeout(1000)
+
+    customer_2 = f"자동화_{runner.mmdd}_2"
+    names = await _get_chart_customer_names(runner)
+    assert customer_2 in names, f"받은 시술(10만원권) 필터 결과에 '{customer_2}' 미노출 (목록: {names})"
+    print(f"✓ 받은 시술 필터 (티켓 > 10만원권) → {customer_2} 노출 확인")
 
 
 async def test_customer_chart_filter_staff(runner):
@@ -757,6 +951,8 @@ async def test_send_slack_results(runner, request):
         "test_verify_statistics_details": "통계 상세 검증",
         "test_custom_payment_method": "결제 수단 설정",
         "test_customer_detail_verification": "고객 상세 검증",
+        "test_c1_detail_tabs": "자동화_1 상세탭 — 매출/예약/정액권/패밀리",
+        "test_c2_detail_tabs": "자동화_2 상세탭 — 매출/예약/티켓",
         "test_block_reservation": "예약 차단",
         "test_staff_statistics_product_type": "상품 유형별 통계",
         "test_staff_statistics_customer_type_real": "고객 유형별 (실 매출 기준)",
