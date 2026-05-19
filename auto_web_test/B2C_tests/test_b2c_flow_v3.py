@@ -94,6 +94,30 @@ class B2CFlowV3:
         await self.runner.setup()
         self.runner.page.set_default_timeout(60000)
 
+    async def _dismiss_popup(self):
+        """페이지 로드 후 공휴일 공지 등 팝업/모달 dimmer 제거"""
+        await self.crm_page.evaluate("""() => {
+            // React 앱 dimmer (#modal-dimmer)
+            const dimmer = document.getElementById('modal-dimmer');
+            if (dimmer) {
+                dimmer.style.display = 'none';
+                dimmer.style.pointerEvents = 'none';
+                if (dimmer.parentElement) {
+                    dimmer.parentElement.style.display = 'none';
+                    dimmer.parentElement.style.pointerEvents = 'none';
+                }
+            }
+            // 레거시 페이지 dimmer (.modal-dimmer, event-popup 등)
+            document.querySelectorAll('.modal-dimmer.isActiveDimmed').forEach(el => {
+                el.style.display = 'none';
+                el.style.pointerEvents = 'none';
+                if (el.closest('.modal-wrapper')) {
+                    el.closest('.modal-wrapper').style.display = 'none';
+                }
+            });
+        }""")
+        await self.crm_page.wait_for_timeout(500)
+
     async def restore_session(self):
         """체크포인트에서 resume 시 세션 복원"""
         print(f"  세션 복원 중: {self.shop_name}")
@@ -2099,6 +2123,35 @@ class B2CFlowV3:
         print("=== Phase 6: 콕예약 미리보기 → 예약 ===")
         crm_page = self.crm_page
 
+        # 콕예약 관리 페이지로 이동 (resume 시 다른 페이지에 있을 수 있음)
+        await crm_page.bring_to_front()
+        online_menu = crm_page.locator(
+            "h3:has-text('온라인 예약'):visible, "
+            "a:has-text('온라인 예약'):visible, "
+            "button:has-text('온라인 예약'):visible, "
+            "span:has-text('온라인 예약'):visible"
+        ).first
+        await expect(online_menu).to_be_visible(timeout=15000)
+        await online_menu.click()
+        await crm_page.wait_for_timeout(1000)
+        kok_menu = crm_page.locator(
+            "a:has-text('콕예약 관리'):visible, "
+            "span:has-text('콕예약 관리'):visible, "
+            "h4:has-text('콕예약 관리'):visible, "
+            "li:has-text('콕예약 관리'):visible"
+        ).first
+        if not await kok_menu.is_visible():
+            await online_menu.click()
+            await crm_page.wait_for_timeout(1000)
+        await expect(kok_menu).to_be_visible(timeout=15000)
+        await kok_menu.click()
+        try:
+            await crm_page.wait_for_load_state("networkidle", timeout=15000)
+        except Exception:
+            pass
+        await crm_page.wait_for_timeout(1000)
+        print("  ✓ 콕예약 관리 진입")
+
         # ── 콕예약 A 미리보기 → 예약 (수정된 값으로 검증) ──
         print("\n--- 콕예약 A 미리보기 예약 ---")
         self.booking_a = await self._preview_and_book(
@@ -2149,20 +2202,13 @@ class B2CFlowV3:
             pass
         await crm_page.wait_for_timeout(2000)
 
-        # dimmer 닫기
-        for _ in range(5):
-            dim = crm_page.locator("#modal-dimmer.isActiveDimmed:visible").first
-            if await dim.count() > 0:
-                await dim.click(force=True)
-                await crm_page.wait_for_timeout(500)
-            else:
-                break
+        await self._dismiss_popup()
 
         # "일" 보기 전환
         for name in ["일", "날짜별"]:
             btn = crm_page.get_by_role("button", name=name).first
             if await btn.count() > 0 and await btn.is_visible():
-                await btn.click()
+                await btn.click(force=True)
                 try:
                     await crm_page.wait_for_load_state("networkidle", timeout=15000)
                 except Exception:
@@ -2315,7 +2361,8 @@ class B2CFlowV3:
         crm_page = self.crm_page
         tomorrow_kok = self.tomorrow_kok
 
-        # 좌측 GNB → 매출 메뉴 클릭
+        # 팝업 닫기 후 좌측 GNB → 매출 메뉴 클릭
+        await self._dismiss_popup()
         sales_menu = crm_page.locator(
             "h3:has-text('매출'):visible, "
             "a:has-text('매출'):visible, "
@@ -2329,6 +2376,7 @@ class B2CFlowV3:
             pass
         await crm_page.wait_for_timeout(1000)
         print("  ✓ 매출 페이지 진입")
+        await self._dismiss_popup()
 
         # 날짜 선택: 내일 날짜로 변경
         date_picker = crm_page.locator("div#div-choosedate-query-startdate").first
@@ -2375,7 +2423,8 @@ class B2CFlowV3:
             print("=== Phase 7.6: 통계 > 시술 통계 검증 ===")
             crm_page = self.crm_page
 
-            # 좌측 GNB → 통계 메뉴 클릭
+            # 팝업 닫기 후 좌측 GNB → 통계 메뉴 클릭
+            await self._dismiss_popup()
             stats_menu = crm_page.locator(
                 "h3:has-text('통계'):visible, a:has-text('통계'):visible, "
                 "span:has-text('통계'):visible"
@@ -2496,7 +2545,8 @@ class B2CFlowV3:
         print("=== Phase 8: 공비서로 예약받기 비활성화 ===")
         crm_page = self.crm_page
 
-        # GNB > 온라인 예약 클릭
+        # 팝업 닫기 후 GNB > 온라인 예약 클릭
+        await self._dismiss_popup()
         online_menu8 = crm_page.locator(
             "h3:has-text('온라인 예약'):visible, "
             "a:has-text('온라인 예약'):visible, "
