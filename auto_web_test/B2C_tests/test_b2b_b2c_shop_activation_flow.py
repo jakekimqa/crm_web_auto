@@ -383,15 +383,19 @@ async def _kakao_login(page):
 
 
 async def _get_shop_id_from_crm(page) -> str:
-    preview_btn = page.get_by_role("button", name="미리보기")
+    preview_btn = page.locator("a:has-text('미리보기'), button:has-text('미리보기')").first
     await expect(preview_btn).to_be_visible(timeout=10000)
+
+    href = await preview_btn.get_attribute("href")
+    if href and "/shop/" in href:
+        shop_id = href.rstrip("/").split("/")[-1]
+        return shop_id
 
     async with page.expect_popup() as popup_info:
         await preview_btn.click()
     preview_page = await popup_info.value
     await preview_page.wait_for_load_state("networkidle")
 
-    # URL: https://.../shop/S000005093
     url = preview_page.url
     shop_id = url.rstrip("/").split("/")[-1]
     await preview_page.close()
