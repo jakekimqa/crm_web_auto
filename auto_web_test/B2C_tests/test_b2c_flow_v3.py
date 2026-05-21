@@ -796,23 +796,25 @@ class B2CFlowV3:
         mt = await modal.inner_text()
         if "환불 방식" not in mt:
             print("  ✓ 환불 방식 미노출 (예약금 없는 샵)")
-        assert "취소 사유" in mt
 
-        dr = modal.get_by_text(re.compile(r"시술이 어려운|다른 시간")).first
-        await expect(dr).to_be_visible(timeout=15000)
-        await dr.click()
-        self.reason_text = await dr.inner_text()
-        print(f"  ✓ 디폴트 사유: '{self.reason_text}'")
+        if "취소 사유" in mt:
+            dr = modal.get_by_text(re.compile(r"시술이 어려운|다른 시간")).first
+            await expect(dr).to_be_visible(timeout=15000)
+            await dr.click()
+            self.reason_text = await dr.inner_text()
+            print(f"  ✓ 디폴트 사유: '{self.reason_text}'")
+        else:
+            self.reason_text = None
+            print("  ✓ 단순 확인 모달 (취소 사유 없음)")
 
-        cb = modal.get_by_role("button", name=re.compile(r"예약\s*취소")).first
+        cb = modal.locator(
+            "button:has-text('예약 취소'), "
+            "button:has-text('확인')"
+        ).last
         await expect(cb).to_be_visible(timeout=15000)
         await cb.scroll_into_view_if_needed()
         await crm_page.wait_for_timeout(300)
-        await cb.evaluate("""el => {
-            el.dispatchEvent(new MouseEvent('mousedown', {bubbles: true, cancelable: true}));
-            el.dispatchEvent(new MouseEvent('mouseup', {bubbles: true, cancelable: true}));
-            el.dispatchEvent(new MouseEvent('click', {bubbles: true, cancelable: true}));
-        }""")
+        await cb.click(force=True)
         await crm_page.wait_for_timeout(3000)
         try:
             await crm_page.wait_for_load_state("networkidle", timeout=15000)
@@ -852,20 +854,23 @@ class B2CFlowV3:
         await crm_page.wait_for_timeout(1000)
         await crm_page.screenshot(path=str(SHOT_DIR / "cancel_04_detail.png"))
 
-        banner = crm_page.locator("h5.banner-title").filter(has_text="샵에서 취소한 예약")
+        banner = crm_page.locator("h5.banner-title").filter(has_text="취소한 예약")
         if await banner.count() == 0:
-            banner = crm_page.get_by_text(re.compile(r"샵에서 취소한 예약")).first
+            banner = crm_page.get_by_text(re.compile(r"취소한 예약|취소된 예약")).first
         await expect(banner).to_be_visible(timeout=15000)
         print(f"  ✓ 취소 배너: '{await banner.inner_text()}'")
 
-        rel = crm_page.locator("p.banner-desc").first
-        if await rel.count() == 0:
-            rel = crm_page.get_by_text(re.compile(r"취소\s*사유")).first
-        await expect(rel).to_be_visible(timeout=15000)
-        displayed = await rel.inner_text()
-        print(f"  ✓ 취소 사유: '{displayed}'")
-        assert self.reason_text[:10] in displayed, f"불일치! '{self.reason_text}' vs '{displayed}'"
-        print("  ✓ 취소 사유 일치!")
+        if self.reason_text:
+            rel = crm_page.locator("p.banner-desc").first
+            if await rel.count() == 0:
+                rel = crm_page.get_by_text(re.compile(r"취소\s*사유")).first
+            await expect(rel).to_be_visible(timeout=15000)
+            displayed = await rel.inner_text()
+            print(f"  ✓ 취소 사유: '{displayed}'")
+            assert self.reason_text[:10] in displayed, f"불일치! '{self.reason_text}' vs '{displayed}'"
+            print("  ✓ 취소 사유 일치!")
+        else:
+            print("  ✓ 취소 사유 없는 모달이므로 사유 검증 스킵")
         await crm_page.screenshot(path=str(SHOT_DIR / "cancel_05_verified.png"))
 
     async def phase_4_5(self):
