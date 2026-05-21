@@ -2046,11 +2046,29 @@ class B2CFlowV3:
             pass
         await b2c_page.wait_for_timeout(1000)
 
+        # 앱 다운로드 이벤트 팝업 제거
+        await b2c_page.evaluate("""() => {
+            document.querySelectorAll('article, [class*="banner"], [class*="popup"], [class*="event"]').forEach(el => {
+                if (el.textContent.includes('앱 다운로드') || el.textContent.includes('App 다운로드')) {
+                    el.style.display = 'none';
+                    el.style.pointerEvents = 'none';
+                }
+            });
+            document.querySelectorAll('[role="alert"]').forEach(el => {
+                el.style.display = 'none';
+                el.style.pointerEvents = 'none';
+            });
+        }""")
+        await b2c_page.wait_for_timeout(500)
+
         # 카카오 로그인
-        kakao_btn = b2c_page.locator("button:has-text('카카오로 계속하기'), button:has-text('카카오')").first
-        if await kakao_btn.count() > 0 and await kakao_btn.is_visible():
+        async def _do_kakao_login():
+            kakao_btn = b2c_page.locator("button:has-text('카카오로 계속하기'), button:has-text('카카오')").first
+            if await kakao_btn.count() == 0 or not await kakao_btn.is_visible():
+                return False
+            await kakao_btn.scroll_into_view_if_needed()
             async with b2c_page.expect_popup(timeout=15000) as popup_info:
-                await kakao_btn.click()
+                await kakao_btn.click(force=True)
             popup = await popup_info.value
             try:
                 await popup.wait_for_load_state("networkidle", timeout=15000)
@@ -2074,12 +2092,14 @@ class B2CFlowV3:
                 except Exception:
                     pass
             except Exception:
-                pass  # 이미 로그인된 상태
+                pass
 
             await b2c_page.wait_for_timeout(3000)
             await b2c_page.wait_for_load_state("domcontentloaded")
             print(f"  ✓ 카카오 로그인 완료")
+            return True
 
+        await _do_kakao_login()
         await b2c_page.wait_for_timeout(2000)
 
         # 동의 체크
@@ -2088,12 +2108,21 @@ class B2CFlowV3:
             await agree.click()
             await b2c_page.wait_for_timeout(1000)
 
-        # 최종 예약하기
+        # 최종 예약하기 — fallback: 카카오 로그인 필요 시 재시도
         try:
             await b2c_page.locator("#loading-root").wait_for(state="hidden", timeout=30000)
         except Exception:
             pass
         final_btn = b2c_page.locator("button:has-text('예약하기')").last
+        if await final_btn.count() == 0 or not await final_btn.is_visible():
+            logged_in = await _do_kakao_login()
+            if logged_in:
+                await b2c_page.wait_for_timeout(2000)
+                agree2 = b2c_page.locator("label:has-text('위 내용을 확인하였으며'), input[type='checkbox']").first
+                if await agree2.count() > 0:
+                    await agree2.click()
+                    await b2c_page.wait_for_timeout(1000)
+            final_btn = b2c_page.locator("button:has-text('예약하기')").last
         await expect(final_btn).to_be_visible(timeout=15000)
         await final_btn.click(force=True)
         try:
