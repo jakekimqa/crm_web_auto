@@ -983,7 +983,7 @@ class B2CFlowV3:
         await crm_page.wait_for_timeout(500)
         print("  ✓ 결제 수단: 카드 선택")
 
-        save_btn = crm_page.locator("button:has-text('매출 등록')").first
+        save_btn = crm_page.locator("button:has-text('매출 저장'), button:has-text('매출 등록')").first
         await expect(save_btn).to_be_visible(timeout=15000)
         await save_btn.click()
         try:
@@ -1244,7 +1244,7 @@ class B2CFlowV3:
         await crm_page.wait_for_timeout(500)
         print("  ✓ 결제 수단: 카드 선택")
 
-        save_sales_btn = crm_page.locator("button:has-text('매출 등록')").first
+        save_sales_btn = crm_page.locator("button:has-text('매출 저장'), button:has-text('매출 등록')").first
         await expect(save_sales_btn).to_be_visible(timeout=15000)
         await save_sales_btn.click()
         await crm_page.wait_for_timeout(3000)
@@ -2364,7 +2364,7 @@ class B2CFlowV3:
         print("  ✓ 결제수단: 카드 선택")
 
         # 매출 등록 버튼 클릭 (최종)
-        final_sales = crm_page.locator("button:has-text('매출 등록')").first
+        final_sales = crm_page.locator("button:has-text('매출 저장'), button:has-text('매출 등록')").first
         await expect(final_sales).to_be_visible(timeout=15000)
         await final_sales.click()
         try:
