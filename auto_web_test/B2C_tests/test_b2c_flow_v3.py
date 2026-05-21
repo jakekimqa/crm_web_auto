@@ -274,26 +274,39 @@ class B2CFlowV3:
         await expect(name_input).to_be_visible(timeout=15000)
         await name_input.fill(f"{runner.mmdd}_배포_테스트")
 
-        async with runner.page.expect_popup(timeout=60000) as input_addr_info:
-            await runner.page.locator("input#addr[placeholder='샵 주소']").click()
-        input_addr_page = await input_addr_info.value
-        await input_addr_page.wait_for_load_state("domcontentloaded")
-        try:
-            await input_addr_page.wait_for_load_state("networkidle", timeout=15000)
-        except Exception:
-            pass
-        await input_addr_page.wait_for_timeout(1000)
+        for addr_retry in range(3):
+            try:
+                async with runner.page.expect_popup(timeout=60000) as input_addr_info:
+                    await runner.page.locator("input#addr[placeholder='샵 주소']").click()
+                input_addr_page = await input_addr_info.value
+                await input_addr_page.wait_for_load_state("domcontentloaded")
+                try:
+                    await input_addr_page.wait_for_load_state("networkidle", timeout=15000)
+                except Exception:
+                    pass
+                await input_addr_page.wait_for_timeout(2000)
 
-        frame = await runner._find_address_search_frame(input_addr_page)
-        search_input = frame.locator("input#region_name, input.tf_keyword").first
-        await search_input.fill("강남역")
-        await search_input.press("Enter")
+                frame = await runner._find_address_search_frame(input_addr_page)
+                search_input = frame.locator("input#region_name, input.tf_keyword").first
+                await search_input.fill("강남역")
+                await search_input.press("Enter")
+                await input_addr_page.wait_for_timeout(2000)
 
-        address_item = frame.locator("span.txt_address").filter(
-            has_text="서울 강남구 강남대로 지하 396 (강남역)"
-        ).locator("button.link_post").first
-        await expect(address_item).to_be_visible(timeout=15000)
-        await address_item.click()
+                address_item = frame.locator("span.txt_address").filter(
+                    has_text="서울 강남구 강남대로 지하 396 (강남역)"
+                ).locator("button.link_post").first
+                await expect(address_item).to_be_visible(timeout=15000)
+                await address_item.click()
+                break
+            except Exception as e:
+                if addr_retry < 2:
+                    try:
+                        await input_addr_page.close()
+                    except Exception:
+                        pass
+                    await runner.page.wait_for_timeout(1000)
+                else:
+                    raise
 
         detail_addr = runner.page.get_by_placeholder("상세 주소")
         await detail_addr.fill("테스트 상세주소")
