@@ -230,10 +230,10 @@ class ShopActivationRunner(B2BAutomationV2):
         await self.page.wait_for_timeout(2000)
         print("  ✓ 최종 저장 완료")
 
-        # 6. "카카오 알림톡 무료 사용 중" 텍스트 확인
-        kakao_text = self.page.locator("p:has-text('카카오 알림톡 무료 사용 중')").first
+        # 6. "알림톡 무료 사용 중" 텍스트 확인
+        kakao_text = self.page.locator("h2:has-text('알림톡 무료 사용 중'), p:has-text('알림톡 무료 사용 중')").first
         await expect(kakao_text).to_be_visible(timeout=10000)
-        print("  ✓ 카카오 알림톡 무료 사용 중 확인")
+        print("  ✓ 알림톡 무료 사용 중 확인")
 
 
 async def _crm_login(page):
