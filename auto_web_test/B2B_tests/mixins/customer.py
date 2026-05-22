@@ -325,7 +325,9 @@ class CustomerMixin:
         edit_memo = f"자동화 메모 {self.mmdd}"
         edit_nickname = f"닉네임_{self.mmdd}"
         edit_job = "네일아티스트"
-        edit_year, edit_month, edit_day = "1990", "5", "15"
+        edit_year = "1990"
+        edit_month = str(int(self.mmdd[:2]))
+        edit_day = str(int(self.mmdd[2:]))
 
         # ── 고객 메모 입력 ──
         await memo_input.fill(edit_memo)
@@ -372,6 +374,20 @@ class CustomerMixin:
                 await detail_page.wait_for_timeout(500)
         print(f"✓ 생년월일 선택: {edit_year}년 {edit_month}월 {edit_day}일")
 
+        # ── 그룹 선택 (3번째그룹) ──
+        edit_group = "3번째그룹"
+        group_btn = detail_page.locator("#customer-group-no button[data-testid='select-toggle-button']").first
+        await expect(group_btn).to_be_visible(timeout=5000)
+        await group_btn.click()
+        await detail_page.wait_for_timeout(500)
+        group_option = detail_page.locator(f"li:has-text('{edit_group}')").first
+        if await group_option.count() == 0:
+            group_option = detail_page.get_by_text(edit_group, exact=True).first
+        await expect(group_option).to_be_visible(timeout=5000)
+        await group_option.click()
+        await detail_page.wait_for_timeout(500)
+        print(f"✓ 그룹 선택: {edit_group}")
+
         # ── 직업 입력 ──
         job_input = detail_page.get_by_placeholder("직업을 입력해 주세요.").first
         await expect(job_input).to_be_visible(timeout=5000)
@@ -405,9 +421,9 @@ class CustomerMixin:
         birth_patterns = [
             f"{edit_year}.{edit_month}.{edit_day}",
             f"{edit_year}. {edit_month}. {edit_day}",
-            f"1990년 5월 15일",
-            f"90.05.15",
-            f"90. 5. 15",
+            f"{edit_year}년 {edit_month}월 {edit_day}일",
+            f"90.{int(edit_month):02d}.{int(edit_day):02d}",
+            f"90. {edit_month}. {edit_day}",
         ]
         birth_found = any(p in body_text for p in birth_patterns)
         assert birth_found, f"생년월일 반영 실패: {birth_patterns} 중 어느 것도 없음"
@@ -458,11 +474,25 @@ class CustomerMixin:
         else:
             print("⚠ 삭제 버튼을 찾을 수 없어 삭제 차단 검증 스킵")
 
-        print(f"=== 고객 프로필 수정 테스트 완료: {customer_name} ===\n")
-
+        # ── 그룹 반영 검증: 고객차트에서 그룹 탭 클릭 후 고객 노출 확인 ──
         if detail_page is not self.page and not detail_page.is_closed():
             await detail_page.close()
             await self.focus_main_page()
+        await self._open_customer_chart()
+        group_tab = self.page.locator(f"[data-testid='customer-group-tab-item']:has-text('{edit_group}')").first
+        await expect(group_tab).to_be_visible(timeout=5000)
+        await group_tab.click()
+        await self.page.wait_for_timeout(1500)
+        await self._assert_customer_exists_in_list(customer_name)
+        print(f"✓ 그룹 반영 확인: '{edit_group}' 탭에서 {customer_name} 노출 확인")
+
+        # ── 전체 탭으로 복귀 ──
+        all_tab = self.page.locator("[data-testid='customer-group-tab-item']:has-text('전체')").first
+        if await all_tab.count() > 0 and await all_tab.is_visible():
+            await all_tab.click()
+            await self.page.wait_for_timeout(500)
+
+        print(f"=== 고객 프로필 수정 테스트 완료: {customer_name} ===\n")
 
     async def _verify_customer_tabs(self, customer_name, expected):
         """고객 상세 페이지에서 각 탭 데이터 정합성 검증"""
