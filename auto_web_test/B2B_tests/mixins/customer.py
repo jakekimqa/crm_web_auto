@@ -590,15 +590,17 @@ class CustomerMixin:
             await detail_page.close()
             await self.focus_main_page()
 
-    async def customer_detail_verification(self):
-        """고객 상세 통합 검증: 프로필 수정 + 삭제 차단 + 3명 탭 데이터 정합성"""
-        print("\n========== 고객 상세 통합 검증 시작 ==========")
-
-        # ── 1. 고객_3 프로필 수정 + 삭제 차단 ──
+    async def customer_profile_edit_and_group_verify(self):
+        """고객 프로필 수정 + 그룹 선택/검증 + 삭제 차단"""
+        print("\n========== 고객 프로필 수정 + 그룹 검증 시작 ==========")
         customer_3 = f"자동화_{self.mmdd}_3"
         await self.customer_profile_edit_and_delete_blocked(customer_3)
+        print("========== 고객 프로필 수정 + 그룹 검증 완료 ==========\n")
 
-        # ── 2. 고객_1 탭 데이터 정합성 ──
+    async def customer_detail_verification(self):
+        """고객 상세 3명 탭 데이터 정합성"""
+        print("\n========== 고객 상세 탭 검증 시작 ==========")
+
         customer_1 = f"자동화_{self.mmdd}_1"
         await self._verify_customer_tabs(customer_1, {
             "expected_real_sales": "200,000원",
@@ -609,7 +611,6 @@ class CustomerMixin:
             "family_keywords": [f"자동화_{self.mmdd}_3"],
         })
 
-        # ── 3. 고객_2 탭 데이터 정합성 ──
         customer_2 = f"자동화_{self.mmdd}_2"
         await self._verify_customer_tabs(customer_2, {
             "sales_keywords": ["티켓"],
@@ -617,7 +618,7 @@ class CustomerMixin:
             "ticket_keywords": ["10만원권"],
         })
 
-        # ── 4. 고객_3 탭 데이터 정합성 ──
+        customer_3 = f"자동화_{self.mmdd}_3"
         await self._verify_customer_tabs(customer_3, {
             "expected_real_sales": "10,000원",
             "sales_keywords": ["케어", "현금", "카드", "정액권"],
@@ -628,4 +629,4 @@ class CustomerMixin:
             "family_keywords": [f"자동화_{self.mmdd}_1"],
         })
 
-        print("========== 고객 상세 통합 검증 완료 ==========\n")
+        print("========== 고객 상세 탭 검증 완료 ==========\n")

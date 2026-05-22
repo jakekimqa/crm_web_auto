@@ -152,8 +152,13 @@ async def test_custom_payment_method(runner):
     await runner.custom_payment_method()
 
 
+async def test_customer_profile_edit(runner):
+    """고객 프로필 수정 + 그룹 선택/검증"""
+    await runner.customer_profile_edit_and_group_verify()
+
+
 async def test_customer_detail_verification(runner):
-    """고객 상세 검증"""
+    """고객 상세 탭 데이터 정합성"""
     await runner.customer_detail_verification()
 
 
