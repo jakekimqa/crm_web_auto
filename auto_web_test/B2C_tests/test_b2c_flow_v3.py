@@ -509,17 +509,58 @@ class B2CFlowV3:
         finally:
             await staff_browser.close()
 
-        # 원장 계정으로 승인
+        # 원장 계정으로 알림 벨 → 매출/운영 탭 → 직원 등록 요청 클릭 → 직원관리 진입
         await runner.page.bring_to_front()
-        await runner.page.locator("text=우리샵 관리").first.click()
-        await runner.page.wait_for_timeout(500)
-        await runner.page.locator("text=직원관리").first.click()
+        await runner.page.goto(f"{CRM_BASE_URL}/book/calendar", wait_until="domcontentloaded")
+        try:
+            await runner.page.wait_for_load_state("networkidle", timeout=15000)
+        except Exception:
+            pass
+        await runner.page.wait_for_timeout(2000)
+
+        # 팝업 dimmer 제거
+        for _ in range(5):
+            dim = runner.page.locator("#modal-dimmer.isActiveDimmed:visible").first
+            if await dim.count() > 0:
+                await dim.click(force=True)
+                await runner.page.wait_for_timeout(500)
+            else:
+                break
+
+        # 예약현황 패널이 열려있으면 닫기
+        panel_close_btn = runner.page.locator("button:has(img[alt='예약 비활성화'])").first
+        try:
+            await panel_close_btn.wait_for(state="visible", timeout=3000)
+            await panel_close_btn.click()
+            await runner.page.wait_for_timeout(500)
+            print("  ✓ 예약현황 패널 닫기")
+        except Exception:
+            pass
+
+        # 알림 벨 버튼 클릭
+        bell_btn = runner.page.locator("button[data-track-id='notification_panel_open']").first
+        await expect(bell_btn).to_be_visible(timeout=15000)
+        await bell_btn.click()
+        await runner.page.wait_for_timeout(1500)
+        print("  ✓ 알림 벨 클릭")
+
+        # 매출/운영 탭 클릭
+        ops_tab = runner.page.locator("button[data-track-id='notification_tab'][data-track-type='매출/운영']").first
+        await expect(ops_tab).to_be_visible(timeout=15000)
+        await ops_tab.click()
+        await runner.page.wait_for_timeout(1000)
+        print("  ✓ 매출/운영 탭 선택")
+
+        # 직원 등록 요청 알림 클릭 → 직원관리 페이지 이동
+        staff_noti = runner.page.locator("div[data-notification-key^='ENTER_EMP'][role='button']").first
+        await expect(staff_noti).to_be_visible(timeout=15000)
+        await staff_noti.click()
         try:
             await runner.page.wait_for_load_state("networkidle", timeout=15000)
         except Exception:
             pass
         await runner.page.wait_for_timeout(1000)
-        print(f"  ✓ 직원관리 페이지 진입")
+        print(f"  ✓ 직원관리 페이지 진입 (알림 경유): {runner.page.url}")
 
         staff_row = runner.page.locator("tr:has-text('테스트_직원계정1')")
         await expect(staff_row).to_be_visible(timeout=15000)
@@ -950,6 +991,13 @@ class B2CFlowV3:
             else:
                 break
 
+        # 예약현황 패널이 열려있으면 닫기 (카드 클릭을 가릴 수 있음)
+        booking_panel_close = crm_page.locator("img[alt='예약 비활성화']").first
+        if await booking_panel_close.count() > 0 and await booking_panel_close.is_visible():
+            await booking_panel_close.click()
+            await crm_page.wait_for_timeout(500)
+            print("  [OK] 예약현황 패널 닫기")
+
         male_block = crm_page.locator("div.booking-normal").first
         await expect(male_block).to_be_visible(timeout=15000)
         await male_block.click(force=True)
@@ -1011,11 +1059,9 @@ class B2CFlowV3:
             await crm_page.wait_for_load_state("networkidle", timeout=15000)
         except Exception:
             pass
-        await crm_page.wait_for_timeout(1000)
-        sales_label = crm_page.locator("h4.SALE.disabled:has-text('매출 등록')").first
-        if await sales_label.count() == 0:
-            sales_label = crm_page.locator("h4:has-text('매출 등록')").first
-        await expect(sales_label).to_be_visible(timeout=15000)
+        await crm_page.wait_for_timeout(2000)
+        sales_label = crm_page.locator("h4:has-text('매출 등록')").first
+        await expect(sales_label).to_be_visible(timeout=30000)
         print("  ✓ 매출 등록 완료 상태 확인")
         await crm_page.screenshot(path=str(SHOT_DIR / "cancel_05c_sales_done.png"))
 
@@ -1154,17 +1200,15 @@ class B2CFlowV3:
         print("  ✓ B2C 예약 완료/신청 텍스트 확인")
         await zero_page.screenshot(path=str(SHOT_DIR / "phase46_01_b2c_pending.png"))
 
-        # Step 4: CRM 캘린더에서 해당 예약 확인
+        # Step 4: CRM 알림 벨 → 예약 탭 → 예약 클릭
         await crm_page.bring_to_front()
-        await _switch_shop(crm_page, self.shop_name)
 
-        d = datetime.now() + timedelta(days=1)
         await crm_page.goto(f"{CRM_BASE_URL}/book/calendar", wait_until="domcontentloaded")
         try:
             await crm_page.wait_for_load_state("networkidle", timeout=15000)
         except Exception:
             pass
-        await crm_page.wait_for_timeout(1000)
+        await crm_page.wait_for_timeout(2000)
 
         for _ in range(5):
             dim = crm_page.locator("#modal-dimmer.isActiveDimmed:visible").first
@@ -1174,51 +1218,48 @@ class B2CFlowV3:
             else:
                 break
 
-        for name in ["일", "날짜별"]:
-            btn = crm_page.get_by_role("button", name=name).first
-            if await btn.count() > 0 and await btn.is_visible():
-                await btn.click()
-                try:
-                    await crm_page.wait_for_load_state("networkidle", timeout=15000)
-                except Exception:
-                    pass
-                await crm_page.wait_for_timeout(1000)
-                break
+        # 예약현황 패널이 열려있으면 닫기 (말풍선을 가리므로 먼저 닫아야 함)
+        panel_close_btn = crm_page.locator("button:has(img[alt='예약 비활성화'])").first
+        try:
+            await panel_close_btn.wait_for(state="visible", timeout=3000)
+            await panel_close_btn.click()
+            await crm_page.wait_for_timeout(500)
+            print("  ✓ 예약현황 패널 닫기")
+        except Exception:
+            print("  [SKIP] 예약현황 패널 없음")
 
-        for _ in range(3):
-            dim = crm_page.locator("#modal-dimmer.isActiveDimmed:visible").first
-            if await dim.count() > 0:
-                await dim.click(force=True)
-                await crm_page.wait_for_timeout(500)
-            else:
-                break
+        # 알림 말풍선 확인
+        noti_bubble = crm_page.locator("h5:has-text('대기 중인 예약')").first
+        await expect(noti_bubble).to_be_visible(timeout=15000)
+        bubble_text = await noti_bubble.inner_text()
+        print(f"  ✓ 알림 말풍선: {bubble_text}")
 
-        target_day = f"{d.month}. {d.day}"
-        header = await crm_page.locator("h2.fc-toolbar-title, .fc-toolbar-title").first.text_content()
-        for _ in range(10):
-            if target_day in header:
-                break
-            current_day = int(re.search(rf"{d.month}\.\s*(\d+)", header).group(1))
-            btn_cls = "fc-next-button" if current_day < d.day else "fc-prev-button"
-            nav_btn = crm_page.locator(f"button.{btn_cls}").first
-            await expect(nav_btn).to_be_visible(timeout=15000)
-            await nav_btn.click()
-            try:
-                await crm_page.wait_for_load_state("networkidle", timeout=15000)
-            except Exception:
-                pass
-            await crm_page.wait_for_timeout(1000)
-            header = await crm_page.locator("h2.fc-toolbar-title, .fc-toolbar-title").first.text_content()
-        print(f"  ✓ 캘린더 날짜: {header.strip()}")
+        # 알림 벨 버튼 클릭
+        bell_btn = crm_page.locator("button[data-track-id='notification_panel_open']").first
+        await expect(bell_btn).to_be_visible(timeout=15000)
+        await bell_btn.click()
+        await crm_page.wait_for_timeout(1500)
+        print("  ✓ 알림 벨 클릭 → 알림 패널 열림")
 
-        for _ in range(3):
-            dim = crm_page.locator("#modal-dimmer.isActiveDimmed:visible").first
-            if await dim.count() > 0:
-                await dim.click(force=True)
-                await crm_page.wait_for_timeout(500)
-            else:
-                break
+        # "예약" 탭 클릭
+        reservation_tab = crm_page.locator("button[data-track-id='notification_tab'][data-track-type='예약']").first
+        await expect(reservation_tab).to_be_visible(timeout=15000)
+        await reservation_tab.click()
+        await crm_page.wait_for_timeout(1500)
+        print("  ✓ 예약 탭 선택")
 
+        # 알림 목록에서 해당 예약 클릭 → 캘린더로 이동
+        noti_item = crm_page.locator("div[data-notification-key^='ZERO_BOOKING_READY'][role='button']").first
+        await expect(noti_item).to_be_visible(timeout=15000)
+        await noti_item.click()
+        try:
+            await crm_page.wait_for_load_state("networkidle", timeout=15000)
+        except Exception:
+            pass
+        await crm_page.wait_for_timeout(2000)
+        print(f"  ✓ 알림 클릭 → 캘린더 이동: {crm_page.url}")
+
+        # 캘린더에서 대기 중인 예약 카드 클릭 → 예약 상세 진입
         pending_block = crm_page.locator("div.READY.booking-normal").first
         await expect(pending_block).to_be_visible(timeout=15000)
         await pending_block.click(force=True)
@@ -1229,6 +1270,7 @@ class B2CFlowV3:
             pass
         confirm_detail_url = crm_page.url
         print(f"  ✓ 예약 상세: {confirm_detail_url}")
+        await crm_page.screenshot(path=str(SHOT_DIR / "phase46_02_crm_pending.png"))
 
         # Step 5: 확인 후 확정 안내 확인
         detail_text = await crm_page.locator("body").inner_text()
