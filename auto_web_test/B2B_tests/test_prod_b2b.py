@@ -94,7 +94,7 @@ class B2BAutomationTest:
         for i in range(1, 4):
 
             customer_name = f"자동화_{self.mmdd}_{i}"
-            phone_number = f"010{self.mmdd}000{i}"
+            phone_number = f"011{self.mmdd}000{i}"
 
             print(f"{i}. 고객 추가: {customer_name}, {phone_number}")
 
@@ -128,7 +128,7 @@ class B2BAutomationTest:
         # print("4. 중복 연락처 테스트")
         # await self.page.click('text=신규 고객 등록')
         # await self.page.fill("#customer-name", "자동화")
-        # await self.page.fill("#customer-contact", f"010{self.mmdd}0001")
+        # await self.page.fill("#customer-contact", f"011{self.mmdd}0001")
         # async with self.page.expect_event("dialog", timeout=3000) as dlg_info:
         #     await self.page.locator("button:has-text('고객 등록'):visible").last.click()
         # dialog = await dlg_info.value
@@ -151,8 +151,8 @@ class B2BAutomationTest:
 
 
         customer_name = f"자동화_{self.mmdd}_1"
-        phone_number = f"010{self.mmdd}0001"
-        phone_pattern = re.compile(rf"010\D*{self.mmdd}\D*0001")
+        phone_number = f"011{self.mmdd}0001"
+        phone_pattern = re.compile(rf"011\D*{self.mmdd}\D*0001")
 
         # 첫 페이지에서 고객명 클릭 → 새 탭 핸들 얻기
         async with self.context.expect_page() as new_page_info:
@@ -247,8 +247,8 @@ class B2BAutomationTest:
         print("=== 티켓 충전 테스트 시작 ===")
 
         customer_name = f"자동화_{self.mmdd}_2"
-        phone_number = f"010{self.mmdd}0002"
-        phone_pattern = re.compile(rf"010\D*{self.mmdd}\D*0002")
+        phone_number = f"011{self.mmdd}0002"
+        phone_pattern = re.compile(rf"011\D*{self.mmdd}\D*0002")
 
         # 첫 페이지에서 고객명 클릭 → 새 탭 핸들 얻기
         async with self.context.expect_page() as new_page_info:
@@ -777,7 +777,7 @@ class B2BAutomationTest:
         await self.page.locator(".new-item").first.click()
         await self.page.wait_for_load_state('networkidle')
 
-        phone_number = f"010{self.mmdd}0001"
+        phone_number = f"011{self.mmdd}0001"
         #
         # 1) 검색 인풋에 번호 입력 (보이는 것 기준 첫 번째)
         field = self.page.locator("input#customer-search:visible").first

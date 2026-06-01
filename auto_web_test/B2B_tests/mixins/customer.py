@@ -151,9 +151,9 @@ class CustomerMixin:
         await self._open_customer_chart()
 
         customers = [
-            (f"자동화_{self.mmdd}_1", f"010{self.mmdd}0001"),
-            (f"자동화_{self.mmdd}_2", f"010{self.mmdd}0002"),
-            (f"자동화_{self.mmdd}_3", f"010{self.mmdd}0003"),
+            (f"자동화_{self.mmdd}_1", f"011{self.mmdd}0001"),
+            (f"자동화_{self.mmdd}_2", f"011{self.mmdd}0002"),
+            (f"자동화_{self.mmdd}_3", f"011{self.mmdd}0003"),
         ]
 
         for idx, (name, phone) in enumerate(customers, 1):
