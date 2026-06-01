@@ -432,13 +432,19 @@ async def _do_booking_flow(page, shop_id: str):
         await page.wait_for_timeout(1000)
         print("  ✓ 담당자 선택: 샵주테스트")
 
-    # 날짜 선택 (내일)
-    tomorrow = datetime.now() + timedelta(days=1)
-    day_str = str(tomorrow.day)
-    date_btn = page.get_by_role("button", name=day_str, exact=True).first
-    await expect(date_btn).to_be_visible(timeout=10000)
-    await date_btn.click()
-    await page.wait_for_timeout(1000)
+    # 날짜 선택 (내일부터 7일 이내 첫 번째 활성화된 날짜)
+    tomorrow = None
+    for offset in range(1, 8):
+        candidate = datetime.now() + timedelta(days=offset)
+        day_str = str(candidate.day)
+        date_btn = page.get_by_role("button", name=day_str, exact=True).first
+        if await date_btn.count() > 0 and await date_btn.is_enabled():
+            tomorrow = candidate
+            await date_btn.click()
+            await page.wait_for_timeout(1000)
+            break
+    if tomorrow is None:
+        raise Exception("7일 이내 예약 가능한 날짜 없음")
 
     # 시간 선택 (오전 10:00 또는 첫 번째 사용 가능한 시간)
     time_btn = page.locator("button:has-text('10:00')").first

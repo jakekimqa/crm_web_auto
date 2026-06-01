@@ -518,14 +518,40 @@ class B2CFlowV3:
             pass
         await runner.page.wait_for_timeout(2000)
 
-        # 팝업 dimmer 제거
-        for _ in range(5):
+        # 프로모션 팝업 등 모달 닫기 ("하루 동안 보지 않기" → X 버튼 → ESC → JS 제거)
+        dismiss_link = runner.page.locator("text=하루 동안 보지 않기").first
+        try:
+            await dismiss_link.wait_for(state="visible", timeout=3000)
+            await dismiss_link.click()
+            await runner.page.wait_for_timeout(500)
+            print("  ✓ 프로모션 팝업 닫기 (하루 동안 보지 않기)")
+        except Exception:
+            close_btn = runner.page.locator(
+                "#modal-dimmer button:has-text('×'), "
+                "#modal-dimmer button:has-text('닫기'), "
+                "button[aria-label='닫기'], button[aria-label='close']"
+            ).first
+            try:
+                await close_btn.wait_for(state="visible", timeout=2000)
+                await close_btn.click()
+                await runner.page.wait_for_timeout(500)
+                print("  ✓ 모달 닫기 버튼 클릭")
+            except Exception:
+                pass
+
+        for _ in range(3):
             dim = runner.page.locator("#modal-dimmer.isActiveDimmed:visible").first
             if await dim.count() > 0:
-                await dim.click(force=True)
+                await runner.page.keyboard.press("Escape")
                 await runner.page.wait_for_timeout(500)
             else:
                 break
+
+        # JS로 남은 dimmer 강제 제거
+        await runner.page.evaluate(
+            "document.querySelector('#modal-dimmer')?.classList.remove('isActiveDimmed')"
+        )
+        await runner.page.wait_for_timeout(300)
 
         # 예약현황 패널이 열려있으면 닫기
         panel_close_btn = runner.page.locator("button:has(img[alt='예약 비활성화'])").first
@@ -699,7 +725,9 @@ class B2CFlowV3:
         print("  ✓ 카카오 로그인 완료")
 
         # 첫 번째 예약
-        await _make_reservation(zero_page, self.shop_name, self.shop_id)
+        actual_date = await _make_reservation(zero_page, self.shop_name, self.shop_id)
+        if actual_date:
+            self.tomorrow_kok = actual_date
         print("  ✓ 첫 번째 예약 완료")
 
         # 두 번째 예약
@@ -766,10 +794,15 @@ class B2CFlowV3:
         for _ in range(10):
             if target_day in header:
                 break
-            m = re.search(rf"{d.month}\.\s*(\d+)", header)
+            # "YY. M. D (요일)" 형식에서 월.일 추출
+            m = re.search(r"\d+\.\s*(\d+)\.\s*(\d+)", header)
             if m:
-                current_day = int(m.group(1))
-                btn_cls = "fc-next-button" if current_day < d.day else "fc-prev-button"
+                current_month = int(m.group(1))
+                current_day = int(m.group(2))
+                if current_month < d.month or (current_month == d.month and current_day < d.day):
+                    btn_cls = "fc-next-button"
+                else:
+                    btn_cls = "fc-prev-button"
             else:
                 btn_cls = "fc-next-button"
             for _ in range(3):
@@ -971,8 +1004,12 @@ class B2CFlowV3:
         for _ in range(10):
             if f"{d.month}. {d.day}" in header2:
                 break
-            current_day2 = int(re.search(rf"{d.month}\.\s*(\d+)", header2).group(1))
-            btn_cls2 = "fc-next-button" if current_day2 < d.day else "fc-prev-button"
+            m2 = re.search(r"\d+\.\s*(\d+)\.\s*(\d+)", header2)
+            if m2:
+                cm2, cd2 = int(m2.group(1)), int(m2.group(2))
+                btn_cls2 = "fc-next-button" if (cm2 < d.month or (cm2 == d.month and cd2 < d.day)) else "fc-prev-button"
+            else:
+                btn_cls2 = "fc-next-button"
             nav_btn2 = crm_page.locator(f"button.{btn_cls2}").first
             await expect(nav_btn2).to_be_visible(timeout=15000)
             await nav_btn2.click()
@@ -2334,13 +2371,14 @@ class B2CFlowV3:
         # 내일 날짜로 이동
         d = tomorrow_kok
         header = await crm_page.locator("h2.fc-toolbar-title, .fc-toolbar-title").first.text_content()
+        target_day = f"{d.month}. {d.day}"
         for _ in range(10):
-            if f"{d.day}" in header:
+            if target_day in header:
                 break
-            current_match = re.search(r"(\d+)\.\s*(\d+)", header)
+            current_match = re.search(r"\d+\.\s*(\d+)\.\s*(\d+)", header)
             if current_match:
-                current_day = int(current_match.group(2))
-                btn_cls = "fc-next-button" if current_day < d.day else "fc-prev-button"
+                cm, cd = int(current_match.group(1)), int(current_match.group(2))
+                btn_cls = "fc-next-button" if (cm < d.month or (cm == d.month and cd < d.day)) else "fc-prev-button"
             else:
                 btn_cls = "fc-next-button"
             nav_btn = crm_page.locator(f"button.{btn_cls}").first
@@ -2493,23 +2531,29 @@ class B2CFlowV3:
         print("  ✓ 매출 페이지 진입")
         await self._dismiss_popup()
 
-        # 날짜 선택: 내일 날짜로 변경
-        date_picker = crm_page.locator("div#div-choosedate-query-startdate").first
-        if await date_picker.count() == 0:
-            date_picker = crm_page.locator("[id*='choosedate'], [id*='startdate']").first
-        await expect(date_picker).to_be_visible(timeout=15000)
-        await date_picker.click()
-        await crm_page.wait_for_timeout(1000)
-
-        tomorrow_day = str(tomorrow_kok.day)
-        await crm_page.evaluate(f"""() => {{
-            const tds = [...document.querySelectorAll('td, button')];
-            const target = tds.find(td => {{
-                const text = td.textContent.trim();
-                return text === '{tomorrow_day}' && td.offsetParent !== null;
-            }});
-            if (target) target.click();
-        }}""")
+        # 날짜 선택: 예약 날짜로 변경 (start/end 모두 설정)
+        target_d = str(tomorrow_kok.day)
+        target_m = str(tomorrow_kok.month)
+        for picker_id in ["div-choosedate-query-startdate", "div-choosedate-query-enddate"]:
+            picker = crm_page.locator(f"div#{picker_id}").first
+            if await picker.count() == 0:
+                continue
+            await picker.click()
+            await crm_page.wait_for_timeout(500)
+            # 월 select 에서 대상 월 선택
+            month_select = crm_page.locator("select").filter(has_text=re.compile(r"^\d+$")).last
+            if await month_select.count() > 0:
+                await month_select.select_option(value=target_m)
+                await crm_page.wait_for_timeout(300)
+            # 대상 날짜 셀 클릭 (outside-month 제외)
+            day_cells = crm_page.locator("table td, table button").all()
+            for cell in await crm_page.locator("table td").all():
+                text = (await cell.text_content()).strip()
+                classes = await cell.get_attribute("class") or ""
+                if text == target_d and "outside" not in classes and "disabled" not in classes:
+                    await cell.click()
+                    break
+            await crm_page.wait_for_timeout(500)
         try:
             await crm_page.wait_for_load_state("networkidle", timeout=15000)
         except Exception:
