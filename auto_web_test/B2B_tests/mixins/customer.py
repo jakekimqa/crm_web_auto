@@ -307,6 +307,20 @@ class CustomerMixin:
             customer_name = f"자동화_{self.mmdd}_3"
 
         detail_page = await self.open_customer_detail_from_list(customer_name)
+
+        # 프로모션 팝업 닫기 (detail_page는 새 탭이라 별도 처리)
+        try:
+            dismiss = detail_page.locator("text=하루 동안 보지 않기").first
+            await dismiss.wait_for(state="visible", timeout=3000)
+            await dismiss.click()
+            await detail_page.wait_for_timeout(500)
+            print("✓ 프로모션 팝업 닫기 (하루 동안 보지 않기)")
+        except Exception:
+            pass
+        await detail_page.evaluate(
+            "document.querySelector('#modal-dimmer')?.classList.remove('isActiveDimmed')"
+        )
+
         await self.assert_customer_name_visible_top_left(detail_page, customer_name)
         print(f"\n=== 고객 프로필 수정 테스트 시작: {customer_name} ===")
 
