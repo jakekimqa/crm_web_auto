@@ -95,39 +95,38 @@ class B2CFlowV3:
         self.runner.page.set_default_timeout(60000)
 
     async def _dismiss_popup(self):
-        """페이지 로드 후 공휴일 공지 등 팝업/모달 dimmer 제거 + 향후 팝업 자동 차단"""
+        """페이지 로드 후 공휴일 공지 등 팝업/모달 dimmer 제거 + CSS로 영구 차단"""
         await self.crm_page.evaluate("""() => {
-            function killDimmers() {
-                // React 앱 dimmer (#modal-dimmer)
-                const dimmer = document.getElementById('modal-dimmer');
-                if (dimmer) {
-                    dimmer.style.display = 'none';
-                    dimmer.style.pointerEvents = 'none';
-                    if (dimmer.parentElement) {
-                        dimmer.parentElement.style.display = 'none';
-                        dimmer.parentElement.style.pointerEvents = 'none';
-                    }
-                }
-                // 레거시 페이지 dimmer (.modal-dimmer, event-popup 등)
-                document.querySelectorAll('.modal-dimmer.isActiveDimmed').forEach(el => {
-                    el.style.display = 'none';
-                    el.style.pointerEvents = 'none';
-                    if (el.closest('.modal-wrapper')) {
-                        el.closest('.modal-wrapper').style.display = 'none';
-                    }
-                });
+            // 기존 dimmer 즉시 제거
+            document.querySelectorAll('.modal-dimmer.isActiveDimmed').forEach(el => {
+                el.remove();
+            });
+            const dimmer = document.getElementById('modal-dimmer');
+            if (dimmer && dimmer.classList.contains('isActiveDimmed')) {
+                dimmer.remove();
             }
-            killDimmers();
-            // MutationObserver로 이후 나타나는 팝업도 자동 제거
-            if (!window.__dimmerObserver) {
-                window.__dimmerObserver = new MutationObserver(killDimmers);
-                window.__dimmerObserver.observe(document.body, {
-                    childList: true, subtree: true,
-                    attributes: true, attributeFilter: ['class']
-                });
+            // CSS 규칙으로 향후 팝업 영구 차단 (!important로 인라인 스타일 오버라이드)
+            if (!document.getElementById('__qa-dimmer-block')) {
+                const style = document.createElement('style');
+                style.id = '__qa-dimmer-block';
+                style.textContent = `
+                    .modal-dimmer.isActiveDimmed {
+                        display: none !important;
+                        pointer-events: none !important;
+                    }
+                    .modal-wrapper:has(.modal-dimmer.isActiveDimmed) {
+                        display: none !important;
+                        pointer-events: none !important;
+                    }
+                    #modal-dimmer.isActiveDimmed {
+                        display: none !important;
+                        pointer-events: none !important;
+                    }
+                `;
+                document.head.appendChild(style);
             }
         }""")
-        await self.crm_page.wait_for_timeout(500)
+        await self.crm_page.wait_for_timeout(300)
 
     async def restore_session(self):
         """체크포인트에서 resume 시 세션 복원"""
