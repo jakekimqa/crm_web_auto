@@ -2548,7 +2548,8 @@ class B2CFlowV3:
             picker = crm_page.locator(f"div#{picker_id}").first
             if await picker.count() == 0:
                 continue
-            await picker.click()
+            await crm_page.evaluate("document.querySelectorAll('[id^=\"event-popup\"]').forEach(e=>e.remove())")
+            await picker.click(force=True)
             await crm_page.wait_for_timeout(500)
             # 월 select 에서 대상 월 선택
             month_select = crm_page.locator("select").filter(has_text=re.compile(r"^\d+$")).last
@@ -2556,12 +2557,11 @@ class B2CFlowV3:
                 await month_select.select_option(value=target_m)
                 await crm_page.wait_for_timeout(300)
             # 대상 날짜 셀 클릭 (outside-month 제외)
-            day_cells = crm_page.locator("table td, table button").all()
             for cell in await crm_page.locator("table td").all():
                 text = (await cell.text_content()).strip()
                 classes = await cell.get_attribute("class") or ""
                 if text == target_d and "outside" not in classes and "disabled" not in classes:
-                    await cell.click()
+                    await cell.click(force=True)
                     break
             await crm_page.wait_for_timeout(500)
         try:
