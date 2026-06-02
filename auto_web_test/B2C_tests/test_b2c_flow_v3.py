@@ -95,29 +95,29 @@ class B2CFlowV3:
         self.runner.page.set_default_timeout(60000)
 
     async def _dismiss_popup(self):
-        """페이지 로드 후 공휴일 공지 등 팝업/모달 dimmer 제거 + CSS로 영구 차단"""
+        """페이지 로드 후 프로모션 팝업/모달 dimmer 제거 + CSS로 영구 차단"""
         await self.crm_page.evaluate("""() => {
-            // 기존 dimmer 즉시 제거
+            // 기존 팝업 wrapper 및 dimmer 즉시 제거
+            document.querySelectorAll('[id^="event-popup"]').forEach(el => el.remove());
             document.querySelectorAll('.modal-dimmer.isActiveDimmed').forEach(el => {
-                el.remove();
+                if (el.closest('.modal-wrapper')) el.closest('.modal-wrapper').remove();
+                else el.remove();
             });
             const dimmer = document.getElementById('modal-dimmer');
             if (dimmer && dimmer.classList.contains('isActiveDimmed')) {
-                dimmer.remove();
+                if (dimmer.parentElement) dimmer.parentElement.remove();
+                else dimmer.remove();
             }
-            // CSS 규칙으로 향후 팝업 영구 차단 (!important로 인라인 스타일 오버라이드)
+            // CSS 규칙으로 향후 팝업 영구 차단
             if (!document.getElementById('__qa-dimmer-block')) {
                 const style = document.createElement('style');
                 style.id = '__qa-dimmer-block';
                 style.textContent = `
-                    .modal-dimmer.isActiveDimmed {
+                    [id^="event-popup"] {
                         display: none !important;
                         pointer-events: none !important;
                     }
-                    .modal-wrapper:has(.modal-dimmer.isActiveDimmed) {
-                        display: none !important;
-                        pointer-events: none !important;
-                    }
+                    .modal-dimmer.isActiveDimmed,
                     #modal-dimmer.isActiveDimmed {
                         display: none !important;
                         pointer-events: none !important;
