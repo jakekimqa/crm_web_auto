@@ -181,6 +181,22 @@ class CustomerMixin:
 
             # 클릭 후 모달 닫힘 확인, 안 닫히면 재시도
             for click_attempt in range(3):
+                # 프로모션 팝업 dimmer 해제
+                dimmer = self.page.locator("#modal-dimmer.isActiveDimmed").first
+                if await dimmer.count() > 0 and await dimmer.is_visible():
+                    try:
+                        dismiss = self.page.locator("text=하루 동안 보지 않기").first
+                        await dismiss.wait_for(state="visible", timeout=2000)
+                        await dismiss.click()
+                        await self.page.wait_for_timeout(500)
+                        print("  ✓ 프로모션 팝업 닫기 (하루 동안 보지 않기)")
+                    except Exception:
+                        pass
+                    await self.page.evaluate(
+                        "document.querySelector('#modal-dimmer')?.classList.remove('isActiveDimmed')"
+                    )
+                    await self.page.wait_for_timeout(300)
+
                 await reg_btn.click()
                 await self.page.wait_for_timeout(1500)
                 if await self.page.locator("#customer-name:visible").count() == 0:
