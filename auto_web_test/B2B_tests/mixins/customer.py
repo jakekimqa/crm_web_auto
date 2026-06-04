@@ -317,6 +317,86 @@ class CustomerMixin:
         await expect(top_name).to_be_visible(timeout=5000)
         print(f"✓ 고객상세 좌측 상단 이름 노출 확인: {customer_name}")
 
+    async def assert_customer_detail_initial_state(self, detail_page, customer_name):
+        """TC-01/08/14: 고객 상세 초기 진입 시 프로필/요약/버튼/탭/빈 상태 검증"""
+        await self.assert_customer_name_visible_top_left(detail_page, customer_name)
+
+        await detail_page.wait_for_timeout(2000)
+        try:
+            await detail_page.wait_for_load_state("networkidle", timeout=5000)
+        except Exception:
+            pass
+        body_text = await detail_page.locator("body").inner_text()
+
+        # ── 프로필 영역: 연락처(하이픈 포맷) ──
+        phone_match = re.search(r"011-\d{4}-\d{4}", body_text)
+        assert phone_match, f"연락처 하이픈 포맷 미노출 (011-XXXX-XXXX)"
+        print(f"✓ 연락처 하이픈 포맷 확인: {phone_match.group()}")
+
+        # ── 프로필 영역: 담당자 ──
+        assert self.owner_name in body_text, f"담당자 '{self.owner_name}' 미노출"
+        print(f"✓ 담당자 확인: {self.owner_name}")
+
+        # ── 프로필 영역: 선택 정보 "미입력" 표시 ──
+        uninput_count = body_text.count("미입력")
+        assert uninput_count >= 1, "선택 정보 '미입력' 표시가 없습니다"
+        print(f"✓ '미입력' 표시 확인: {uninput_count}건")
+
+        # ── 요약 정보: 실 매출 0원 ──
+        assert "0원" in body_text or "0 원" in body_text, "실 매출 0원 미노출"
+        print("✓ 요약 정보: 0원 확인")
+
+        # ── 버튼 노출: 프로필 수정, 매출 등록, 예약 등록 ──
+        for btn_name in ["프로필 수정", "매출 등록", "예약 등록"]:
+            btn = detail_page.get_by_role("button", name=btn_name).first
+            assert await btn.count() > 0, f"'{btn_name}' 버튼 미노출"
+            print(f"✓ 버튼 확인: {btn_name}")
+
+        # ── 충전 버튼 (정액권/티켓) ──
+        charge_btns = detail_page.get_by_role("button", name="충전")
+        charge_count = await charge_btns.count()
+        assert charge_count >= 2, f"충전 버튼 2개 미만: {charge_count}개"
+        print(f"✓ 충전 버튼 확인: {charge_count}개")
+
+        # ── 8개 탭 노출 + 기본탭 "매출" ──
+        expected_tabs = ["매출", "시술", "제품", "예약", "정액권", "티켓", "포인트", "패밀리"]
+        for tab_name in expected_tabs:
+            tab = detail_page.locator(f'[role="tab"]:has-text("{tab_name}")').first
+            assert await tab.count() > 0, f"'{tab_name}' 탭 미노출"
+        print(f"✓ 8개 탭 노출 확인: {', '.join(expected_tabs)}")
+
+        # 기본 선택 탭 = "매출"
+        active_tab = detail_page.locator('[role="tab"][aria-selected="true"]').first
+        if await active_tab.count() > 0:
+            active_text = await active_tab.inner_text()
+            assert "매출" in active_text, f"기본 선택 탭이 '매출'이 아닙니다: '{active_text}'"
+            print(f"✓ 기본 선택 탭: {active_text.strip()}")
+
+        # ── TC-08: 매출 탭 빈 상태 ──
+        sales_tab_text = await detail_page.locator("body").inner_text()
+        has_empty_sales = ("매출 내역이 없습니다" in sales_tab_text) or ("0원" in sales_tab_text)
+        assert has_empty_sales, "매출 탭 빈 상태 검증 실패"
+        print("✓ 매출 탭: 빈 상태 확인 (TC-08)")
+
+        # ── TC-14: 예약 탭 빈 상태 ──
+        reservation_tab = detail_page.locator('[role="tab"]:has-text("예약")').first
+        await reservation_tab.click()
+        await detail_page.wait_for_timeout(1500)
+        reservation_text = await detail_page.locator("body").inner_text()
+        has_empty_reservation = (
+            "예약 내역이 없습니다" in reservation_text
+            or ("0건" in reservation_text and "예약" in reservation_text)
+        )
+        assert has_empty_reservation, "예약 탭 빈 상태 검증 실패"
+        print("✓ 예약 탭: 빈 상태 확인 (TC-14)")
+
+        # 매출 탭으로 복귀
+        sales_tab = detail_page.locator('[role="tab"]:has-text("매출")').first
+        await sales_tab.click()
+        await detail_page.wait_for_timeout(500)
+
+        print(f"✓ 고객 상세 초기 상태 검증 완료: {customer_name}")
+
     async def customer_profile_edit_and_delete_blocked(self, customer_name=None):
         """고객 상세 프로필 수정 (담당자/메모/닉네임/생년월일/직업) → 저장 → 반영 검증 + 삭제 차단 검증"""
         if customer_name is None:
@@ -404,6 +484,25 @@ class CustomerMixin:
                 await detail_page.wait_for_timeout(500)
         print(f"✓ 생년월일 선택: {edit_year}년 {edit_month}월 {edit_day}일")
 
+        # ── 담당자 변경 (TC-04: And직원) ──
+        edit_staff = "And직원"
+        staff_btn = detail_page.locator("#customer-staff-no button[data-testid='select-toggle-button']").first
+        if await staff_btn.count() == 0 or not await staff_btn.is_visible():
+            # fallback: 담당자 라벨 기준 탐색
+            staff_btn = detail_page.locator("label:has-text('담당자')").locator("..").locator("button[data-testid='select-toggle-button']").first
+        if await staff_btn.count() > 0 and await staff_btn.is_visible():
+            await staff_btn.click()
+            await detail_page.wait_for_timeout(500)
+            staff_option = detail_page.locator(f"li:has-text('{edit_staff}')").first
+            if await staff_option.count() == 0:
+                staff_option = detail_page.get_by_text(edit_staff, exact=True).first
+            await expect(staff_option).to_be_visible(timeout=5000)
+            await staff_option.click()
+            await detail_page.wait_for_timeout(500)
+            print(f"✓ 담당자 변경: {edit_staff}")
+        else:
+            print("⚠ 담당자 드롭다운을 찾을 수 없어 담당자 변경 스킵")
+
         # ── 그룹 선택 (3번째그룹) ──
         edit_group = "3번째그룹"
         group_btn = detail_page.locator("#customer-group-no button[data-testid='select-toggle-button']").first
@@ -446,6 +545,10 @@ class CustomerMixin:
 
         assert edit_job in body_text, f"직업 반영 실패: '{edit_job}' not found"
         print(f"✓ 직업 반영 확인: {edit_job}")
+
+        # 담당자 반영 검증 (TC-04)
+        assert edit_staff in body_text, f"담당자 반영 실패: '{edit_staff}' not found"
+        print(f"✓ 담당자 반영 확인: {edit_staff}")
 
         # 생년월일 검증 (다양한 포맷 대응)
         birth_patterns = [
@@ -619,6 +722,96 @@ class CustomerMixin:
         if detail_page is not self.page and not detail_page.is_closed():
             await detail_page.close()
             await self.focus_main_page()
+
+    async def assert_membership_tab_empty(self, customer_name):
+        """TC-18: 정액권 탭 빈 상태 검증"""
+        detail_page = await self.open_customer_detail_from_list(customer_name)
+        try:
+            await detail_page.wait_for_timeout(1500)
+            membership_tab = detail_page.locator('[role="tab"]:has-text("정액권")').first
+            await membership_tab.click()
+            await detail_page.wait_for_timeout(1500)
+            tab_text = await detail_page.locator("body").inner_text()
+
+            has_empty = (
+                "충전/사용 내역이 없습니다" in tab_text
+                or "내역이 없습니다" in tab_text
+                or "0원" in tab_text
+            )
+            assert has_empty, f"정액권 탭 빈 상태 검증 실패: 빈 상태 메시지 미노출"
+            print(f"✓ {customer_name} 정액권 탭: 빈 상태 확인 (TC-18)")
+        finally:
+            if detail_page is not self.page and not detail_page.is_closed():
+                await detail_page.close()
+                await self.focus_main_page()
+
+    async def assert_membership_tab_charged(self, customer_name):
+        """TC-19: 정액권 충전 후 탭 검증 (보유 금액, 충전 내역)"""
+        detail_page = await self.open_customer_detail_from_list(customer_name)
+        try:
+            await detail_page.wait_for_timeout(1500)
+            membership_tab = detail_page.locator('[role="tab"]:has-text("정액권")').first
+            await membership_tab.click()
+            await detail_page.wait_for_timeout(1500)
+            tab_text = await detail_page.locator("body").inner_text()
+
+            # 보유 정액권 금액 확인 (220,000원 = 200,000 + 보너스 20,000)
+            assert "220,000" in tab_text, f"보유 정액권 금액 미노출: '220,000' not found"
+            print(f"✓ {customer_name} 정액권 탭: 보유 금액 220,000원 확인")
+
+            # 충전 내역 존재 확인
+            has_charge_record = "충전" in tab_text and ("200,000" in tab_text or "220,000" in tab_text)
+            assert has_charge_record, "정액권 충전 내역 미노출"
+            print(f"✓ {customer_name} 정액권 탭: 충전 내역 확인 (TC-19)")
+        finally:
+            if detail_page is not self.page and not detail_page.is_closed():
+                await detail_page.close()
+                await self.focus_main_page()
+
+    async def assert_ticket_tab_empty(self, customer_name):
+        """TC-21: 티켓 탭 빈 상태 검증"""
+        detail_page = await self.open_customer_detail_from_list(customer_name)
+        try:
+            await detail_page.wait_for_timeout(1500)
+            ticket_tab = detail_page.locator('[role="tab"]:has-text("티켓")').first
+            await ticket_tab.click()
+            await detail_page.wait_for_timeout(1500)
+            tab_text = await detail_page.locator("body").inner_text()
+
+            has_empty = (
+                "보유 중인 티켓이 없습니다" in tab_text
+                or "내역이 없습니다" in tab_text
+                or "티켓 충전/사용 내역이 없습니다" in tab_text
+            )
+            assert has_empty, f"티켓 탭 빈 상태 검증 실패: 빈 상태 메시지 미노출"
+            print(f"✓ {customer_name} 티켓 탭: 빈 상태 확인 (TC-21)")
+        finally:
+            if detail_page is not self.page and not detail_page.is_closed():
+                await detail_page.close()
+                await self.focus_main_page()
+
+    async def assert_ticket_tab_charged(self, customer_name):
+        """TC-22: 티켓 충전 후 탭 검증 (보유 티켓, 충전 내역)"""
+        detail_page = await self.open_customer_detail_from_list(customer_name)
+        try:
+            await detail_page.wait_for_timeout(1500)
+            ticket_tab = detail_page.locator('[role="tab"]:has-text("티켓")').first
+            await ticket_tab.click()
+            await detail_page.wait_for_timeout(1500)
+            tab_text = await detail_page.locator("body").inner_text()
+
+            # 보유 티켓명 확인
+            assert "10만원권" in tab_text, f"보유 티켓 '10만원권' 미노출"
+            print(f"✓ {customer_name} 티켓 탭: 보유 티켓 '10만원권' 확인")
+
+            # 충전 내역 존재 확인
+            has_charge_record = "충전" in tab_text
+            assert has_charge_record, "티켓 충전 내역 미노출"
+            print(f"✓ {customer_name} 티켓 탭: 충전 내역 확인 (TC-22)")
+        finally:
+            if detail_page is not self.page and not detail_page.is_closed():
+                await detail_page.close()
+                await self.focus_main_page()
 
     async def customer_profile_edit_and_group_verify(self):
         """고객 프로필 수정 + 그룹 선택/검증 + 삭제 차단"""

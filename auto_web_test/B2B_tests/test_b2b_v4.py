@@ -57,10 +57,18 @@ async def test_setup_customers(runner):
 
 
 async def test_setup_customer_detail_name(runner):
-    """고객 상세 이름 확인 (리스트 → 상세)"""
+    """고객 상세 초기 진입 검증 (TC-01/08/14: 프로필/요약/버튼/탭/빈 상태)"""
     target_name = f"자동화_{runner.mmdd}_1"
     detail_page = await runner.open_customer_detail_from_list(target_name)
-    await runner.assert_customer_name_visible_top_left(detail_page, target_name)
+    await runner.assert_customer_detail_initial_state(detail_page, target_name)
+    if detail_page is not runner.page and not detail_page.is_closed():
+        await detail_page.close()
+
+
+async def test_verify_membership_empty(runner):
+    """TC-18: 자동화_1 정액권 탭 빈 상태 확인 (충전 전)"""
+    target_name = f"자동화_{runner.mmdd}_1"
+    await runner.assert_membership_tab_empty(target_name)
 
 
 async def test_setup_membership_charge(runner):
@@ -70,6 +78,12 @@ async def test_setup_membership_charge(runner):
     runner._membership_hour = datetime.now().hour
 
 
+async def test_verify_membership_charged(runner):
+    """TC-19: 자동화_1 정액권 탭 충전 상태 확인 (충전 후)"""
+    target_name = f"자동화_{runner.mmdd}_1"
+    await runner.assert_membership_tab_charged(target_name)
+
+
 async def test_setup_family_share(runner):
     """자동화_1 ↔ 자동화_3 패밀리 공유"""
     target_owner = f"자동화_{runner.mmdd}_1"
@@ -77,11 +91,23 @@ async def test_setup_family_share(runner):
     await runner.family_add_and_verify(target_owner, target_member)
 
 
+async def test_verify_ticket_empty(runner):
+    """TC-21: 자동화_2 티켓 탭 빈 상태 확인 (충전 전)"""
+    target_name = f"자동화_{runner.mmdd}_2"
+    await runner.assert_ticket_tab_empty(target_name)
+
+
 async def test_setup_ticket_charge(runner):
     """자동화_2 티켓 10만원권 충전"""
     target_name = f"자동화_{runner.mmdd}_2"
     await runner.ticket_charge_and_verify(target_name)
     runner._ticket_hour = datetime.now().hour
+
+
+async def test_verify_ticket_charged(runner):
+    """TC-22: 자동화_2 티켓 탭 충전 상태 확인 (충전 후)"""
+    target_name = f"자동화_{runner.mmdd}_2"
+    await runner.assert_ticket_tab_charged(target_name)
 
 
 async def test_setup_reservations(runner):
