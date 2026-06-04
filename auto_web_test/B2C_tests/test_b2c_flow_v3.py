@@ -182,7 +182,7 @@ class B2CFlowV3:
             if self.checkpoint.shop_name:
                 self.shop_name = self.checkpoint.shop_name
                 # Phase 1 완료 but 1.2, 1.5는 runner.page만 사용
-                if resume_phase not in ["1.2", "1.5"]:
+                if resume_phase not in ["1.1", "1.2", "1.5"]:
                     await self.restore_session()
                 else:
                     # runner만 로그인
@@ -199,6 +199,7 @@ class B2CFlowV3:
 
         phases = [
             ("1", self.phase_1),
+            ("1.1", self.phase_1_1),
             ("1.2", self.phase_1_2),
             ("1.5", self.phase_1_5),
             ("2", self.phase_2),
@@ -363,13 +364,138 @@ class B2CFlowV3:
             pass
         await runner._dismiss_shop_creation_modals()
         print("  ✓ 샵 생성 완료")
+
+        self.checkpoint.mark_start(self.shop_name, CRM_BASE_URL)
+
+    # ──────────────────────────────────────────────
+    # Phase 1.1: 이용권정보 페이지 검증 (무료체험 샵)
+    # ──────────────────────────────────────────────
+    async def phase_1_1(self):
+        print("=== Phase 1.1: 이용권정보 페이지 검증 ===")
+        page = self.runner.page
+
+        # 이용권정보 버튼 클릭
+        sub_btn = page.locator("button:has-text('이용권정보')").first
+        await expect(sub_btn).to_be_visible(timeout=10000)
+        await sub_btn.click()
         try:
-            await runner.enable_gong_booking_after_shop_creation()
+            await page.wait_for_load_state("networkidle", timeout=10000)
+        except Exception:
+            pass
+        await page.wait_for_timeout(1500)
+
+        body = await page.locator("body").inner_text()
+
+        # TC-01: 3개 탭 확인
+        for tab_name in ["이용권", "알림 충전", "결제 수단"]:
+            tab = page.locator(f"button:has-text('{tab_name}')").first
+            assert await tab.count() > 0, f"'{tab_name}' 탭 미노출"
+            print(f"  ✓ 탭 확인: {tab_name}")
+
+        # TC-03: 무료체험 이용권 정보
+        assert "사용중인 이용권" in body or "사용 중인 이용권" in body, "'사용중인 이용권' 미노출"
+        assert "무료체험" in body or "무료 체험" in body, "'무료체험' 미노출"
+        print("  ✓ 무료체험 이용권 확인")
+
+        buy_btn = page.locator("button:has-text('이용권 구매'), a:has-text('이용권 구매')").first
+        assert await buy_btn.count() > 0, "'이용권 구매' 버튼 미노출"
+        print("  ✓ '이용권 구매' 버튼 확인")
+
+        has_period = "사용 기한" in body or "만료" in body or re.search(r"\d{4}[.\-/]\d{1,2}[.\-/]\d{1,2}", body)
+        assert has_period, "사용 기한/만료일 미노출"
+        print("  ✓ 사용 기한 확인")
+
+        assert "결제 내역" in body, "'결제 내역' 섹션 미노출"
+        print("  ✓ 결제 내역 섹션 확인")
+
+        # TC-06: 이용권 구매 페이지 진입
+        await buy_btn.click()
+        try:
+            await page.wait_for_load_state("networkidle", timeout=10000)
+        except Exception:
+            pass
+        await page.wait_for_timeout(1500)
+        purchase_body = await page.locator("body").inner_text()
+
+        annual_tab = page.locator("button:has-text('연간 결제'), [role='tab']:has-text('연간 결제')").first
+        monthly_tab = page.locator("button:has-text('월간 결제'), [role='tab']:has-text('월간 결제')").first
+        assert await annual_tab.count() > 0, "'연간 결제' 탭 미노출"
+        assert await monthly_tab.count() > 0, "'월간 결제' 탭 미노출"
+        print("  ✓ 연간/월간 결제 탭 확인")
+
+        # TC-07: 연간 결제 옵션
+        assert "Standard" in purchase_body, "Standard 미노출"
+        assert "Pro" in purchase_body, "Pro 미노출"
+        buy_btns = page.locator("button:has-text('구매하기')")
+        assert await buy_btns.count() >= 2, "'구매하기' 버튼 2개 미만"
+        print("  ✓ 연간 결제: Standard/Pro, 구매하기 버튼 확인")
+
+        # TC-08: 월간 결제 옵션
+        await monthly_tab.click()
+        await page.wait_for_timeout(1000)
+        monthly_body = await page.locator("body").inner_text()
+        assert "Standard" in monthly_body and "Pro" in monthly_body, "월간 Standard/Pro 미노출"
+        assert await buy_btns.count() >= 2, "월간 '구매하기' 버튼 2개 미만"
+        print("  ✓ 월간 결제: Standard/Pro, 구매하기 버튼 확인")
+
+        # 이용권 메인으로 복귀
+        base = page.url.split("/payment/")[0]
+        await page.goto(f"{base}/payment/license", timeout=15000)
+        await page.wait_for_timeout(1500)
+
+        # TC-09: 알림 충전 탭
+        charge_tab = page.locator("button:has-text('알림 충전')").first
+        await charge_tab.click()
+        await page.wait_for_timeout(1500)
+        charge_body = await page.locator("body").inner_text()
+        assert "알림 현황" in charge_body or "잔여 알림" in charge_body or "잔여알림" in charge_body, "'알림 현황' 미노출"
+        charge_btn = page.locator("button:has-text('충전하기')").first
+        assert await charge_btn.count() > 0, "'충전하기' 버튼 미노출"
+        assert "자동 충전" in charge_body, "'자동 충전' 영역 미노출"
+        assert "충전 내역" in charge_body, "'충전 내역' 미노출"
+        print("  ✓ 알림 충전 탭 확인")
+
+        # TC-20: 탭 전환
+        tabs_check = {
+            "이용권": ["사용중인 이용권", "사용 중인 이용권", "결제 내역", "무료체험", "무료 체험"],
+            "알림 충전": ["알림 현황", "잔여 알림", "잔여알림", "충전 내역"],
+            "결제 수단": ["결제 수단"],
+        }
+        for t_name, keywords in tabs_check.items():
+            t = page.locator(f"button:has-text('{t_name}')").first
+            await t.click()
+            await page.wait_for_timeout(1500)
+            t_body = await page.locator("body").inner_text()
+            assert any(kw in t_body for kw in keywords), f"'{t_name}' 탭 콘텐츠 미노출"
+        print("  ✓ 탭 전환 정상")
+
+        # TC-21: 상단 헤더
+        header_body = await page.locator("body").inner_text()
+        assert "원장님" in header_body, "'원장님' 미노출"
+        assert "캘린더로 이동" in header_body or "캘린더" in header_body, "'캘린더로 이동' 미노출"
+        assert "로그아웃" in header_body, "'로그아웃' 미노출"
+        print("  ✓ 상단 헤더 확인")
+
+        # 캘린더로 복귀
+        cal_link = page.locator("a:has-text('캘린더로 이동'), button:has-text('캘린더로 이동')").first
+        if await cal_link.count() > 0:
+            await cal_link.click()
+        else:
+            await page.goto(f"{base}/book/calendar", timeout=15000)
+        try:
+            await page.wait_for_load_state("networkidle", timeout=10000)
+        except Exception:
+            pass
+        await page.wait_for_timeout(1500)
+        print("  ✓ 캘린더 복귀 완료")
+
+        # 공비서 입점
+        try:
+            await self.runner.enable_gong_booking_after_shop_creation()
         except Exception as exc:
             if "토글이 ON 상태" not in str(exc) and "activate-switch" not in str(exc):
                 raise
-
-        self.checkpoint.mark_start(self.shop_name, CRM_BASE_URL)
+        print("  ✓ 공비서 입점 완료")
 
     # ──────────────────────────────────────────────
     # Phase 1.2: 샵 소식 작성
