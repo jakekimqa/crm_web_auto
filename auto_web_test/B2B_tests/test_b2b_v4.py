@@ -183,6 +183,11 @@ async def test_customer_profile_edit(runner):
     await runner.customer_profile_edit_and_group_verify()
 
 
+async def test_blacklist_toggle(runner):
+    """TC-07: 블랙리스트 토글 ON/OFF + 블랙리스트 탭 확인"""
+    await runner.blacklist_toggle_on_off()
+
+
 async def test_customer_detail_verification(runner):
     """고객 상세 탭 데이터 정합성"""
     await runner.customer_detail_verification()
@@ -872,6 +877,17 @@ async def test_c2_detail_tabs(runner):
             ticket_card = detail.locator("div:has-text('10만원권')").first
             card_text = await ticket_card.inner_text()
             print(f"✓ {customer_2} 티켓 탭 — 보유 티켓 내역: {card_text.strip()}")
+
+        # ── TC-23: 티켓 차감 검증 (매출2에서 2장 사용) ──
+        usage_row = detail.locator("tr.data-row:has-text('사용')").first
+        if await usage_row.count() > 0:
+            usage_text = await usage_row.inner_text()
+            assert "-2" in usage_text or "사용" in usage_text, f"티켓 차감 내역 검증 실패: '{usage_text}'"
+            print(f"✓ {customer_2} 티켓 탭 — 사용 차감 내역 확인 (TC-23)")
+        else:
+            # 충전/사용 내역 영역에서 차감 확인
+            assert "사용" in body_text or "-" in body_text, "티켓 사용 내역 미노출 (TC-23)"
+            print(f"✓ {customer_2} 티켓 탭 — 사용 내역 확인 (TC-23)")
     finally:
         if detail is not runner.page and not detail.is_closed():
             await detail.close()

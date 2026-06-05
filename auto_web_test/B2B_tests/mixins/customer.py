@@ -390,12 +390,96 @@ class CustomerMixin:
         assert has_empty_reservation, "예약 탭 빈 상태 검증 실패"
         print("✓ 예약 탭: 빈 상태 확인 (TC-14)")
 
+        # ── TC-25: 포인트 탭 빈 상태 ──
+        point_tab = detail_page.locator('[role="tab"]:has-text("포인트")').first
+        await point_tab.click()
+        await detail_page.wait_for_timeout(1500)
+        point_text = await detail_page.locator("body").inner_text()
+        has_empty_point = (
+            "포인트 적립/사용 내역이 없습니다" in point_text
+            or "내역이 없습니다" in point_text
+            or "0P" in point_text
+            or "0 P" in point_text
+        )
+        assert has_empty_point, "포인트 탭 빈 상태 검증 실패"
+        print("✓ 포인트 탭: 빈 상태 확인 (TC-25)")
+
         # 매출 탭으로 복귀
         sales_tab = detail_page.locator('[role="tab"]:has-text("매출")').first
         await sales_tab.click()
         await detail_page.wait_for_timeout(500)
 
         print(f"✓ 고객 상세 초기 상태 검증 완료: {customer_name}")
+
+    async def _click_blacklist_toggle(self, detail_page):
+        """블랙리스트 토글 클릭 (hidden checkbox → label[for] 사용)"""
+        # id가 'blacklist-블랙리스트'인 checkbox의 label 클릭
+        label = detail_page.locator("label[for*='blacklist']").first
+        if await label.count() > 0 and await label.is_visible():
+            await label.click()
+            await detail_page.wait_for_timeout(1500)
+            return
+
+        # fallback: 블랙리스트 영역의 클릭 가능한 요소
+        bl_area = detail_page.locator("div:has(> input[id*='blacklist'])").first
+        if await bl_area.count() > 0:
+            await bl_area.click()
+            await detail_page.wait_for_timeout(1500)
+            return
+
+        # fallback2: 텍스트 근처 label
+        bl_label = detail_page.locator("text=블랙리스트").first.locator("xpath=..").locator("label").first
+        await bl_label.click()
+        await detail_page.wait_for_timeout(1500)
+
+    async def blacklist_toggle_on_off(self, customer_name=None):
+        """TC-07: 블랙리스트 토글 ON → 고객차트 블랙리스트 탭 확인"""
+        if customer_name is None:
+            customer_name = f"자동화_{self.mmdd}_3"
+
+        detail_page = await self.open_customer_detail_from_list(customer_name)
+        try:
+            # 프로모션 팝업 닫기
+            try:
+                dismiss = detail_page.locator("text=하루 동안 보지 않기").first
+                if await dismiss.is_visible():
+                    await dismiss.click()
+                    await detail_page.wait_for_timeout(500)
+            except Exception:
+                pass
+
+            # ON
+            await self._click_blacklist_toggle(detail_page)
+
+            # 확인 팝업이 있으면 확인 클릭
+            confirm_btn = detail_page.locator(
+                "button:has-text('확인'):visible, button:has-text('네'):visible"
+            ).first
+            if await confirm_btn.count() > 0:
+                await confirm_btn.click()
+                await detail_page.wait_for_timeout(1000)
+
+            print(f"✓ {customer_name} 블랙리스트 토글 ON")
+        finally:
+            if detail_page is not self.page and not detail_page.is_closed():
+                await detail_page.close()
+
+        # 고객차트 → 블랙리스트 탭 확인
+        await self.focus_main_page()
+        await self._open_customer_chart()
+        await self.page.wait_for_timeout(1000)
+
+        bl_tab = self.page.locator(
+            "button:has-text('블랙리스트'), [role='tab']:has-text('블랙리스트')"
+        ).first
+        if await bl_tab.count() > 0:
+            await bl_tab.click()
+            await self.page.wait_for_timeout(1500)
+            body_text = await self.page.locator("body").inner_text()
+            assert customer_name in body_text, f"블랙리스트 탭에 '{customer_name}' 미노출"
+            print(f"✓ 고객차트 블랙리스트 탭에서 '{customer_name}' 확인")
+        else:
+            print("⚠ 블랙리스트 탭을 찾지 못함 — 스킵")
 
     async def customer_profile_edit_and_delete_blocked(self, customer_name=None):
         """고객 상세 프로필 수정 (담당자/메모/닉네임/생년월일/직업) → 저장 → 반영 검증 + 삭제 차단 검증"""

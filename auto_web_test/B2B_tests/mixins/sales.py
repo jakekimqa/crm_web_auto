@@ -322,6 +322,36 @@ class SalesMixin:
         await self._open_sales_registration_from_calendar(customer)
         await self._assert_sales_registration_page(expected_total="20,000원")
 
+        # ── 예약 TC-01: URL 검증 (bookNo, returnUrl) ──
+        url = self.page.url
+        assert "bookNo=" in url or "sale/register" in url, f"매출 등록 URL 검증 실패: {url}"
+        print(f"  ✓ 예약 TC-01: 매출 등록 페이지 URL 확인")
+
+        # ── 예약 TC-02: 예약 정보 자동 입력 확인 ──
+        body = await self.page.locator("body").inner_text()
+        assert customer in body, f"고객명 자동 입력 실패: '{customer}' 미노출"
+        assert "젤 기본" in body, "시술명 자동 입력 실패: '젤 기본' 미노출"
+        print(f"  ✓ 예약 TC-02: 고객명({customer}), 시술명(젤 기본) 자동 입력 확인")
+
+        # ── 예약 TC-03: 매출 등록 폼 전체 필드 구성 확인 ──
+        # 상품 탭
+        treatment_tab = self.page.locator("div, button").filter(has_text=re.compile(r"시술\s*메뉴")).first
+        assert await treatment_tab.count() > 0, "'시술 메뉴' 탭 미노출"
+        product_tab = self.page.locator("div, button").filter(has_text=re.compile(r"제품")).first
+        assert await product_tab.count() > 0, "'제품' 탭 미노출"
+        # 결제 수단
+        for pay_name in ["현금", "카드", "정액권"]:
+            pay_el = self.page.locator(f"text={pay_name}").first
+            assert await pay_el.count() > 0, f"결제 수단 '{pay_name}' 미노출"
+        # 포인트 적립 섹션
+        assert "포인트" in body, "포인트 적립 섹션 미노출"
+        # 매출 메모/사진
+        assert "매출 메모" in body or "메모" in body, "매출 메모 섹션 미노출"
+        # 매출 등록 버튼
+        save_point = await self._find_sales_save_click_point()
+        assert save_point is not None, "매출 등록 버튼 미노출"
+        print(f"  ✓ 예약 TC-03: 폼 필드 구성 확인 (상품탭/결제수단/포인트/메모/등록버튼)")
+
         membership_input = self.page.locator('input[name="정액권($membership원)"]').nth(1)
         await membership_input.click()
         await membership_input.fill("21000")
@@ -562,6 +592,40 @@ class SalesMixin:
             pass
         await self.page.wait_for_timeout(1500)
         print("  ✓ 신규 매출 등록 페이지 진입")
+
+        # ── 신규 TC-02: 매출등록 폼 전체 필드 구성 확인 ──
+        reg_url = self.page.url
+        assert "/sale/register" in reg_url, f"매출등록 URL 검증 실패: {reg_url}"
+        assert "bookNo" not in reg_url, f"신규 매출등록인데 bookNo 파라미터가 있음: {reg_url}"
+
+        form_body = await self.page.locator("body").inner_text()
+        # 페이지 제목
+        title = self.page.get_by_role("heading", name="매출 등록").locator(":visible").first
+        if await title.count() == 0:
+            title = self.page.locator("h1:has-text('매출 등록'):visible").first
+        assert await title.count() > 0, "'매출 등록' 페이지 제목 미노출"
+        # 고객 검색 필드
+        cust_search = self.page.locator("input#customer-search:visible").first
+        assert await cust_search.count() > 0, "고객 검색 입력 필드 미노출"
+        # 미등록 고객 체크박스
+        assert "미등록 고객" in form_body, "'미등록 고객' 체크박스 미노출"
+        # 상품 탭 (시술 메뉴 / 제품)
+        assert re.search(r"시술\s*메뉴", form_body), "'시술 메뉴' 탭 미노출"
+        # 결제 수단
+        for pay in ["현금", "카드", "정액권", "포인트", "미수금"]:
+            assert pay in form_body, f"결제 수단 '{pay}' 미노출"
+        # 결제 수단 설정 / 회원권 충전 버튼
+        assert "결제 수단 설정" in form_body, "'결제 수단 설정' 버튼 미노출"
+        assert "회원권 충전" in form_body, "'회원권 충전' 버튼 미노출"
+        # 포인트 적립 섹션 (고객 미선택 시 숨겨질 수 있음)
+        has_point_section = "포인트 적립" in form_body or "적립 안하기" in form_body or "포인트" in form_body
+        if has_point_section:
+            print("  ✓ 포인트 적립 섹션 노출 확인")
+        else:
+            print("  ⚠ 포인트 적립 섹션 미노출 (고객 미선택 상태 — 정상)")
+        # 매출 메모/사진
+        assert "매출 메모" in form_body or "메모" in form_body, "매출 메모 섹션 미노출"
+        print("  ✓ 신규 TC-02: 폼 필드 구성 확인 (제목/고객검색/미등록/상품탭/결제수단/포인트/메모)")
 
         # ── 2. 고객 검색 ──
         field = self.page.locator("input#customer-search:visible").first
