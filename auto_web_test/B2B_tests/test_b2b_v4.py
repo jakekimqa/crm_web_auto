@@ -120,6 +120,11 @@ async def test_setup_verify_calendar(runner):
     await runner.verify_calendar_reservations()
 
 
+async def test_unregistered_reservation(runner):
+    """미등록 고객 예약: 등록 → 중복확인 → 캘린더 → 상세 → 취소 → 삭제"""
+    await runner.unregistered_customer_reservation()
+
+
 async def test_setup_sales_registrations(runner):
     """매출등록 5건 (사진 포함)"""
     await runner.sales_registrations_1()

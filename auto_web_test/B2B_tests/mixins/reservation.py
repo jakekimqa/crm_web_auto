@@ -465,3 +465,225 @@ class ReservationMixin:
 
         print("✓ 반복 예약막기 삭제 완료 (모든 일정)")
         print("=== 반복 예약막기 삭제 완료 ===\n")
+
+    async def unregistered_customer_reservation(self):
+        """미등록 고객 예약: 등록 → 캘린더 확인 → 상세 확인 → 취소 → 삭제"""
+        print("\n=== 미등록 고객 예약 테스트 시작 ===")
+        await self.ensure_calendar_page()
+        await self._move_calendar_to_today()
+
+        # ── 1. FAB → 예약 등록 모달 ──
+        await self._dismiss_active_dimmer()
+        await self.page.locator("#floating-layout button:visible").first.click(force=True)
+        await self.page.wait_for_timeout(500)
+
+        for cand in [
+            self.page.get_by_role("menuitem", name="예약 등록").locator(":visible").first,
+            self.page.locator("h4:has-text('예약 등록'):visible").first,
+            self.page.locator("button:has-text('예약 등록'):visible, [role='menuitem']:has-text('예약 등록'):visible").first,
+        ]:
+            if await cand.count() > 0:
+                await cand.click(force=True, timeout=4000)
+                break
+        await self.page.wait_for_selector(
+            "#modal-content:visible input#customer-search:visible", timeout=5000
+        )
+        modal = self.page.locator("#modal-content:visible").first
+        print("  ✓ 예약 등록 모달 열림")
+
+        # ── 2. 고객 등록 없이 진행 ──
+        no_register_btn = modal.locator("button:has-text('고객 등록 없이 진행')").first
+        await expect(no_register_btn).to_be_visible(timeout=5000)
+        await no_register_btn.click()
+        await self.page.wait_for_timeout(1000)
+
+        # 안내 텍스트 확인
+        guide_text = "아래 내용은 선택 입력 사항이며, 고객으로 등록되지 않습니다"
+        body_text = await modal.inner_text()
+        assert guide_text in body_text, f"안내 텍스트 미노출: '{guide_text}'"
+        print(f"  ✓ 안내 텍스트 확인")
+
+        # 이름/연락처 입력
+        name_input = modal.locator("input[placeholder*='이름'], input[name*='name']").first
+        await expect(name_input).to_be_visible(timeout=5000)
+        await name_input.fill("미등록 고객 테스트")
+
+        phone_input = modal.locator("input[placeholder*='연락처'], input[name*='phone'], input[type='tel']").first
+        await expect(phone_input).to_be_visible(timeout=5000)
+        await phone_input.fill("0123456789")
+        print("  ✓ 이름: 미등록 고객 테스트, 연락처: 0123456789")
+
+        # [다음]
+        next_btn = modal.locator("button:has-text('다음')").first
+        await expect(next_btn).to_be_visible(timeout=5000)
+        await next_btn.click()
+        await self.page.wait_for_timeout(1000)
+
+        # ── 3. 시간/시술 선택 → 등록 ──
+        time_dropdown = modal.locator(
+            "#createBookingTime:visible, button.select-display:has-text('오전'):visible, button.select-display:has-text('오후'):visible"
+        ).first
+        await expect(time_dropdown).to_be_visible(timeout=5000)
+        await time_dropdown.click(force=True)
+        await self.page.wait_for_timeout(1000)
+        time_option = self.page.locator("li button p:text-is('오후 6:30')").first
+        await time_option.scroll_into_view_if_needed(timeout=3000)
+        await time_option.click()
+        await self.page.wait_for_timeout(500)
+
+        await self.page.locator("#bookingItemGroupSelect button.select-display:visible").first.click()
+        await self.page.locator("button:has-text('발'):visible").first.click()
+        await self.page.wait_for_timeout(300)
+        await self.page.locator("button:has-text('젤 기본'):visible").first.click()
+        await self.page.wait_for_timeout(300)
+        print("  ✓ 오후 6:30, 발 > 젤 기본")
+
+        register_btn = modal.locator("button:has-text('등록'):visible").first
+        await expect(register_btn).to_be_visible(timeout=3000)
+        await register_btn.click()
+        await self.page.wait_for_timeout(1000)
+
+        # 중복 예약 모달 확인 → [확인]
+        overlap_text = "선택 시간에 이미 등록된 예약이 있습니다"
+        overlap_el = self.page.locator(f"text=/{overlap_text}/").first
+        await expect(overlap_el).to_be_visible(timeout=5000)
+        print(f"  ✓ 중복 예약 모달 확인")
+
+        confirm_btn = self.page.locator("button:has-text('확인'):visible").last
+        await confirm_btn.click()
+        await self.page.wait_for_timeout(1000)
+
+        try:
+            await self.page.wait_for_selector("#modal-dimmer.isActiveDimmed", state="hidden", timeout=5000)
+        except Exception:
+            await self.page.keyboard.press("Escape")
+            await self.page.wait_for_timeout(500)
+        print("  ✓ 미등록 고객 예약 등록 완료")
+
+        # ── 4. 캘린더 예약 카드 확인 ──
+        await self.ensure_calendar_page()
+        await self._move_calendar_to_today()
+        await self.page.locator("button:has-text('일'):visible").first.click()
+        await self.page.wait_for_timeout(500)
+
+        reserve_card = None
+        for _ in range(10):
+            reserve_card = self.page.locator("div.BOOKING.booking-normal").filter(has_text="미등록 고객 테스트").first
+            if await reserve_card.count() == 0:
+                reserve_card = self.page.get_by_text("미등록 고객 테스트", exact=False).first
+            if await reserve_card.count() > 0 and await reserve_card.is_visible():
+                break
+            await self.page.mouse.wheel(0, 400)
+            await self.page.wait_for_timeout(300)
+        assert await reserve_card.count() > 0, "캘린더에서 '미등록 고객 테스트' 예약 카드 미발견"
+        print("  ✓ 캘린더 예약 카드 확인")
+
+        # ── 5. 예약 상세 확인 ──
+        await reserve_card.click(force=True)
+        await self.page.wait_for_timeout(1000)
+
+        detail_panel = self.page.locator("div:has(button:has-text('나가기'))").filter(has_text="미등록 고객 테스트").first
+        try:
+            await expect(detail_panel).to_be_visible(timeout=5000)
+        except Exception:
+            await reserve_card.click(force=True)
+            await self.page.wait_for_timeout(1000)
+            detail_panel = self.page.locator("div:has(button:has-text('나가기'))").filter(has_text="미등록 고객 테스트").first
+            await expect(detail_panel).to_be_visible(timeout=5000)
+
+        detail_text = await detail_panel.inner_text()
+        assert "미등록 고객 테스트" in detail_text, "고객명 미발견"
+        assert "젤 기본" in detail_text, "시술명 미발견"
+        import re as _re
+        time_match = _re.search(r'(오전|오후)\s*\d{1,2}:\d{2}', detail_text)
+        assert time_match, f"시간 미발견: {detail_text[:200]}"
+        actual_time = time_match.group()
+        assert "샵주테스트" in detail_text, "담당자 미발견"
+        print(f"  ✓ 상세: 고객명/시술명(젤 기본)/시간({actual_time})/담당자(샵주테스트)")
+
+        # ── 6. 예약 취소 ──
+        status_btn = self.page.locator("button:has-text('예약 확정'):visible").first
+        await expect(status_btn).to_be_visible(timeout=5000)
+        await status_btn.click()
+        await self.page.wait_for_timeout(500)
+
+        cancel_li = self.page.locator("li:has-text('예약 취소'):visible").first
+        await expect(cancel_li).to_be_visible(timeout=5000)
+        await cancel_li.click()
+        await self.page.wait_for_timeout(1000)
+
+        alert_messages = []
+
+        def _auto_accept(dlg):
+            alert_messages.append(dlg.message)
+            asyncio.ensure_future(dlg.accept())
+
+        self.page.on("dialog", _auto_accept)
+
+        confirm_cancel = self.page.locator("button:has-text('확인'):visible").last
+        await expect(confirm_cancel).to_be_visible(timeout=5000)
+        await confirm_cancel.click()
+        await self.page.wait_for_timeout(3000)
+
+        self.page.remove_listener("dialog", _auto_accept)
+        if alert_messages:
+            print(f"  ✓ 취소 alert: {alert_messages[-1]}")
+        print("  ✓ 예약 취소 완료")
+
+        # ── 7. 취소된 예약 삭제 ──
+        await self.ensure_calendar_page()
+        await self._move_calendar_to_today()
+        await self.page.locator("button:has-text('일'):visible").first.click()
+        await self.page.wait_for_timeout(500)
+
+        cancelled_card = None
+        for _ in range(10):
+            for selector in ["div.BOOKING.booking-cancel", "div.BOOKING", "div[class*='booking']"]:
+                cancelled_card = self.page.locator(selector).filter(has_text="미등록 고객 테스트").first
+                if await cancelled_card.count() > 0 and await cancelled_card.is_visible():
+                    break
+            if await cancelled_card.count() > 0 and await cancelled_card.is_visible():
+                break
+            await self.page.mouse.wheel(0, 400)
+            await self.page.wait_for_timeout(300)
+        assert await cancelled_card.count() > 0, "취소된 예약 카드 미발견"
+        await cancelled_card.click(force=True)
+        await self.page.wait_for_timeout(1500)
+
+        # 상세 패널 열림 대기
+        detail_for_delete = self.page.locator("div:has(button:has-text('나가기'))").filter(has_text="미등록 고객 테스트").first
+        try:
+            await expect(detail_for_delete).to_be_visible(timeout=5000)
+        except Exception:
+            await cancelled_card.click(force=True)
+            await self.page.wait_for_timeout(1500)
+            detail_for_delete = self.page.locator("div:has(button:has-text('나가기'))").filter(has_text="미등록 고객 테스트").first
+            await expect(detail_for_delete).to_be_visible(timeout=5000)
+
+        detail_delete_text = await detail_for_delete.inner_text()
+        print(f"  → 삭제 전 상세 패널: {detail_delete_text[:300]}")
+
+        delete_btn = detail_for_delete.locator("button:has-text('삭제'):visible").first
+        if await delete_btn.count() == 0:
+            # 패널 밖에서도 찾아보기
+            delete_btn = self.page.locator("button:has-text('삭제'):visible").first
+        await expect(delete_btn).to_be_visible(timeout=5000)
+        await delete_btn.click()
+        await self.page.wait_for_timeout(1000)
+
+        modal_delete_btn = self.page.locator("button:has-text('삭제'):visible").last
+        await expect(modal_delete_btn).to_be_visible(timeout=5000)
+        await modal_delete_btn.click()
+        await self.page.wait_for_timeout(2000)
+
+        try:
+            await self.page.wait_for_selector("#modal-dimmer.isActiveDimmed", state="hidden", timeout=5000)
+        except Exception:
+            await self.page.keyboard.press("Escape")
+            await self.page.wait_for_timeout(500)
+
+        # 삭제 확인
+        remaining = self.page.locator("div.BOOKING").filter(has_text="미등록 고객 테스트").first
+        assert await remaining.count() == 0, "삭제 후에도 예약이 남아있음"
+        print("  ✓ 예약 삭제 완료 — 캘린더에서 미노출 확인")
+        print("=== 미등록 고객 예약 테스트 완료 ===\n")
