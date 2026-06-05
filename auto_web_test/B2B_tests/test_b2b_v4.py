@@ -273,24 +273,53 @@ async def _get_customer_type_values(table, row):
     return result
 
 
-async def _wait_for_batch(runner, staff_name, expected_sales_count, max_retries=20, interval=30):
+async def _wait_for_batch(runner, staff_name, expected_sales_count, max_retries=10, interval=30):
+    async def _check_sales():
+        await _open_staff_statistics(runner)
+        await runner.page.wait_for_timeout(2000)
+        # 테이블 tbody에 데이터 행이 나타날 때까지 대기
+        try:
+            await runner.page.locator("table:visible tbody tr").first.wait_for(timeout=5000)
+        except Exception:
+            pass
+        table = runner.page.locator("table:visible").first
+        if await table.count() > 0:
+            row = await _get_staff_row(table, staff_name)
+            if row is not None:
+                return await _get_value_by_col_header(table, "매출 건수", row)
+        return 0
+
+    # 먼저 이미 반영됐는지 확인
+    try:
+        actual = await _check_sales()
+        if actual >= expected_sales_count:
+            print(f"✓ 배치 이미 반영됨 (매출 건수: {actual}건)")
+            return
+        print(f"  [배치 대기] 현재 매출 건수: {actual}건 (기대: {expected_sales_count}건)")
+    except Exception:
+        print("  [배치 대기] 초기 확인 실패, 배치 대기 진행")
+
+    # 통계 배치가 매 :00, :30에 실행되므로 다음 배치 시각+1분까지 대기
+    now = datetime.now()
+    minute = now.minute
+    if minute < 30:
+        next_batch_min = 30
+    else:
+        next_batch_min = 60
+    wait_seconds = (next_batch_min - minute) * 60 - now.second + 60
+    if wait_seconds > 0:
+        print(f"  [배치 대기] 다음 배치 시각까지 {wait_seconds}초 대기 (현재 {now.strftime('%H:%M:%S')})")
+        await runner.page.wait_for_timeout(wait_seconds * 1000)
+
     for attempt in range(max_retries):
         try:
-            await _open_staff_statistics(runner)
-            table = runner.page.locator("table:visible").first
-            if await table.count() > 0:
-                row = await _get_staff_row(table, staff_name)
-                if row is not None:
-                    try:
-                        actual = await _get_value_by_col_header(table, "매출 건수", row)
-                        print(f"  [배치 대기 {attempt + 1}/{max_retries}] 매출 건수: {actual}건 (기대: {expected_sales_count}건)")
-                        if actual >= expected_sales_count:
-                            print(f"✓ 배치 반영 완료 (시도 {attempt + 1}회)")
-                            return
-                    except Exception:
-                        print(f"  [배치 대기 {attempt + 1}/{max_retries}] 값 파싱 실패, 재시도...")
+            actual = await _check_sales()
+            print(f"  [배치 확인 {attempt + 1}/{max_retries}] 매출 건수: {actual}건 (기대: {expected_sales_count}건)")
+            if actual >= expected_sales_count:
+                print(f"✓ 배치 반영 완료 (시도 {attempt + 1}회)")
+                return
         except Exception as e:
-            print(f"  [배치 대기 {attempt + 1}/{max_retries}] 페이지 진입 실패: {e}")
+            print(f"  [배치 확인 {attempt + 1}/{max_retries}] 확인 실패: {e}")
 
         if attempt < max_retries - 1:
             print(f"  → {interval}초 대기 후 재시도...")
@@ -299,8 +328,7 @@ async def _wait_for_batch(runner, staff_name, expected_sales_count, max_retries=
             await runner.page.goto(f"{base}/book/calendar", wait_until="domcontentloaded")
 
     raise AssertionError(
-        f"배치 반영 타임아웃: {staff_name} 매출 건수가 {expected_sales_count}건에 도달하지 못함 "
-        f"({max_retries * interval}초 대기)"
+        f"배치 반영 타임아웃: {staff_name} 매출 건수가 {expected_sales_count}건에 도달하지 못함"
     )
 
 

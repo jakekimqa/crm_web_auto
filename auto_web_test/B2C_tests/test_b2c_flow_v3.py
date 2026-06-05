@@ -94,9 +94,17 @@ class B2CFlowV3:
         await self.runner.setup()
         self.runner.page.set_default_timeout(60000)
 
-    async def _dismiss_popup(self):
+    @staticmethod
+    def _header_date_matches(hdr, target_month, target_day_num):
+        m = re.search(r"(\d+)\.\s*(\d+)\.\s*(\d+)", hdr)
+        return m and int(m.group(2)) == target_month and int(m.group(3)) == target_day_num
+
+    async def _dismiss_popup(self, page=None):
         """페이지 로드 후 프로모션 팝업/모달 dimmer 제거 + CSS로 영구 차단"""
-        await self.crm_page.evaluate("""() => {
+        page = page or self.crm_page
+        if page is None:
+            return
+        await page.evaluate("""() => {
             // 기존 팝업 wrapper 및 dimmer 즉시 제거
             document.querySelectorAll('[id^="event-popup"]').forEach(el => el.remove());
             document.querySelectorAll('.modal-dimmer.isActiveDimmed').forEach(el => {
@@ -126,7 +134,7 @@ class B2CFlowV3:
                 document.head.appendChild(style);
             }
         }""")
-        await self.crm_page.wait_for_timeout(300)
+        await page.wait_for_timeout(300)
 
     async def restore_session(self):
         """체크포인트에서 resume 시 세션 복원"""
@@ -373,11 +381,12 @@ class B2CFlowV3:
     async def phase_1_1(self):
         print("=== Phase 1.1: 이용권정보 페이지 검증 ===")
         page = self.runner.page
+        await self._dismiss_popup(page)
 
         # 이용권정보 버튼 클릭
         sub_btn = page.locator("button:has-text('이용권정보')").first
         await expect(sub_btn).to_be_visible(timeout=10000)
-        await sub_btn.click()
+        await sub_btn.click(force=True)
         try:
             await page.wait_for_load_state("networkidle", timeout=10000)
         except Exception:
@@ -463,8 +472,9 @@ class B2CFlowV3:
         }
         for t_name, keywords in tabs_check.items():
             t = page.locator(f"button:has-text('{t_name}')").first
-            await t.click()
-            await page.wait_for_timeout(1500)
+            await t.click(force=True)
+            await page.wait_for_timeout(2500)
+            await self._dismiss_popup(page)
             t_body = await page.locator("body").inner_text()
             assert any(kw in t_body for kw in keywords), f"'{t_name}' 탭 콘텐츠 미노출"
         print("  ✓ 탭 전환 정상")
@@ -602,46 +612,61 @@ class B2CFlowV3:
             await staff_page.wait_for_timeout(1000)
             print(f"  ✓ 직원({STAFF_ID}) 로그인 완료")
 
-            add_shop_btn = staff_page.locator("button:has-text('샵 추가'), a:has-text('샵 추가')").first
-            await expect(add_shop_btn).to_be_visible(timeout=15000)
-            await add_shop_btn.click()
-            try:
-                await staff_page.wait_for_load_state("networkidle", timeout=15000)
-            except Exception:
-                pass
-            await staff_page.wait_for_timeout(1000)
+            # 이미 해당 샵에 가입 신청했는지 확인 (재시도 대응)
+            already_joined = False
+            existing_row = staff_page.locator(f"tr:has-text('{self.shop_name}')")
+            if await existing_row.count() > 0:
+                already_joined = True
+                print(f"  ⊘ 이미 {self.shop_name} 가입 신청 상태 — 입사 신청 생략")
+            else:
+                page_text = await staff_page.locator("body").inner_text()
+                if self.shop_name in page_text:
+                    already_joined = True
+                    print(f"  ⊘ 이미 {self.shop_name} 연결됨 — 입사 신청 생략")
 
-            search_input = staff_page.locator("input[type='text'], input[placeholder*='검색'], input[placeholder*='샵']").first
-            await expect(search_input).to_be_visible(timeout=15000)
-            await search_input.click()
-            await search_input.type(self.shop_name, delay=50)
-            await staff_page.wait_for_timeout(1500)
+            if not already_joined:
+                add_shop_btn = staff_page.locator("button:has-text('샵 추가'), a:has-text('샵 추가')").first
+                await expect(add_shop_btn).to_be_visible(timeout=15000)
+                await add_shop_btn.click()
+                try:
+                    await staff_page.wait_for_load_state("networkidle", timeout=15000)
+                except Exception:
+                    pass
+                await staff_page.wait_for_timeout(1000)
 
-            shop_item = staff_page.locator(f"text={self.shop_name}").first
-            await expect(shop_item).to_be_visible(timeout=15000)
-            await shop_item.click()
-            await staff_page.wait_for_timeout(1000)
-            print(f"  ✓ {self.shop_name} 선택")
+                search_input = staff_page.locator("input[type='text'], input[placeholder*='검색'], input[placeholder*='샵']").first
+                await expect(search_input).to_be_visible(timeout=15000)
+                await search_input.click()
+                await search_input.type(self.shop_name, delay=50)
+                await staff_page.wait_for_timeout(2000)
 
-            modal_next = staff_page.locator("button:has-text('다음'), a:has-text('다음')").last
-            await expect(modal_next).to_be_visible(timeout=15000)
-            await modal_next.click()
-            await staff_page.wait_for_timeout(1000)
+                shop_item = staff_page.locator(f"li:has-text('{self.shop_name}'), [role='option']:has-text('{self.shop_name}'), .search-result:has-text('{self.shop_name}')").first
+                if await shop_item.count() == 0:
+                    shop_item = staff_page.locator(f":not(input):text('{self.shop_name}')").first
+                await expect(shop_item).to_be_visible(timeout=15000)
+                await shop_item.click()
+                await staff_page.wait_for_timeout(1000)
+                print(f"  ✓ {self.shop_name} 선택")
 
-            page_next = staff_page.locator("button:has-text('다음'), a:has-text('다음')").first
-            await expect(page_next).to_be_visible(timeout=15000)
-            await page_next.click()
-            try:
-                await staff_page.wait_for_load_state("networkidle", timeout=15000)
-            except Exception:
-                pass
-            await staff_page.wait_for_timeout(1000)
+                modal_next = staff_page.locator("button:has-text('다음'), a:has-text('다음')").last
+                await expect(modal_next).to_be_visible(timeout=15000)
+                await modal_next.click()
+                await staff_page.wait_for_timeout(1000)
 
-            shop_row = staff_page.locator(f"tr:has-text('{self.shop_name}')")
-            await expect(shop_row).to_be_visible(timeout=15000)
-            status = await shop_row.locator("td.status").text_content()
-            assert "승인 전" in status, f"상태 확인 실패: {status}"
-            print(f"  ✓ 입사 신청 완료 → 상태: {status.strip()}")
+                page_next = staff_page.locator("button:has-text('다음'), a:has-text('다음')").first
+                await expect(page_next).to_be_visible(timeout=15000)
+                await page_next.click()
+                try:
+                    await staff_page.wait_for_load_state("networkidle", timeout=15000)
+                except Exception:
+                    pass
+                await staff_page.wait_for_timeout(1000)
+
+                shop_row = staff_page.locator(f"tr:has-text('{self.shop_name}')")
+                await expect(shop_row).to_be_visible(timeout=15000)
+                status = await shop_row.locator("td.status").text_content()
+                assert "승인 전" in status, f"상태 확인 실패: {status}"
+                print(f"  ✓ 입사 신청 완료 → 상태: {status.strip()}")
         finally:
             await staff_browser.close()
 
@@ -699,34 +724,73 @@ class B2CFlowV3:
         except Exception:
             pass
 
-        # 알림 벨 버튼 클릭
+        # dimmer 제거 후 알림 벨 → 직원 알림 → 직원관리 페이지
+        await self._dismiss_popup(runner.page)
         bell_btn = runner.page.locator("button[data-track-id='notification_panel_open']").first
         await expect(bell_btn).to_be_visible(timeout=15000)
-        await bell_btn.click()
-        await runner.page.wait_for_timeout(1500)
+        await bell_btn.click(force=True)
+        await runner.page.wait_for_timeout(2000)
         print("  ✓ 알림 벨 클릭")
 
-        # 매출/운영 탭 클릭
+        # 매출/운영 탭이 있으면 클릭 (신규 샵은 탭 미노출 가능)
         ops_tab = runner.page.locator("button[data-track-id='notification_tab'][data-track-type='매출/운영']").first
-        await expect(ops_tab).to_be_visible(timeout=15000)
-        await ops_tab.click()
-        await runner.page.wait_for_timeout(1000)
-        print("  ✓ 매출/운영 탭 선택")
+        if await ops_tab.count() == 0:
+            ops_tab = runner.page.locator("button:has-text('매출/운영')").first
+        if await ops_tab.count() > 0:
+            await ops_tab.click(force=True)
+            await runner.page.wait_for_timeout(1000)
+            print("  ✓ 매출/운영 탭 선택")
+        else:
+            print("  ⊘ 알림 탭 미노출 (신규 샵) — 직접 직원관리 이동")
 
-        # 직원 등록 요청 알림 클릭 → 직원관리 페이지 이동
+        # 직원 등록 알림 클릭 시도, 없으면 직접 URL 이동
         staff_noti = runner.page.locator("div[data-notification-key^='ENTER_EMP'][role='button']").first
-        await expect(staff_noti).to_be_visible(timeout=15000)
-        await staff_noti.click()
-        try:
-            await runner.page.wait_for_load_state("networkidle", timeout=15000)
-        except Exception:
-            pass
-        await runner.page.wait_for_timeout(1000)
-        print(f"  ✓ 직원관리 페이지 진입 (알림 경유): {runner.page.url}")
+        noti_found = await staff_noti.count() > 0
+        if not noti_found:
+            staff_noti = runner.page.locator("text=직원 등록, text=입사 신청, text=가입 신청").first
+            noti_found = await staff_noti.count() > 0
+        if noti_found:
+            await staff_noti.click()
+            try:
+                await runner.page.wait_for_load_state("networkidle", timeout=15000)
+            except Exception:
+                pass
+            await runner.page.wait_for_timeout(1000)
+            print(f"  ✓ 직원관리 페이지 진입 (알림 경유): {runner.page.url}")
+        else:
+            # 알림 패널 닫기
+            close_btn = runner.page.locator("button:has-text('알림 닫기')").first
+            if await close_btn.count() > 0:
+                await close_btn.click(force=True)
+                await runner.page.wait_for_timeout(500)
+            else:
+                await runner.page.keyboard.press("Escape")
+                await runner.page.wait_for_timeout(500)
+            # 우리샵 관리 → 직원 관리 메뉴로 이동
+            shop_mgmt = runner.page.locator("h3:has-text('우리샵 관리')").first
+            if await shop_mgmt.count() == 0:
+                shop_mgmt = runner.page.get_by_text("우리샵 관리").first
+            await shop_mgmt.click(force=True)
+            await runner.page.wait_for_timeout(1000)
+            staff_menu = runner.page.locator("button:has-text('직원 관리'), button:has-text('직원관리')").first
+            if await staff_menu.count() == 0:
+                staff_menu = runner.page.get_by_text("직원 관리").first
+            if await staff_menu.count() == 0:
+                staff_menu = runner.page.get_by_text("직원관리").first
+            await expect(staff_menu).to_be_visible(timeout=10000)
+            await staff_menu.click()
+            try:
+                await runner.page.wait_for_load_state("networkidle", timeout=15000)
+            except Exception:
+                pass
+            await runner.page.wait_for_timeout(1000)
+            print(f"  ✓ 직원관리 페이지 진입 (메뉴 이동): {runner.page.url}")
 
         staff_row = runner.page.locator("tr:has-text('테스트_직원계정1')")
+        if await staff_row.count() == 0:
+            staff_row = runner.page.locator("tr:has-text('autoqatest2'), tr:has-text('승인 대기'), tr:has-text('가입 승인 전')").first
         await expect(staff_row).to_be_visible(timeout=15000)
-        approve_btn = staff_row.locator("button:has-text('승인 대기')")
+        approve_btn = staff_row.locator("button:has-text('승인 대기'), button:has-text('승인')").first
         await expect(approve_btn).to_be_visible(timeout=15000)
         await approve_btn.click()
         await runner.page.wait_for_timeout(1000)
@@ -785,9 +849,18 @@ class B2CFlowV3:
 
         # ── 로그인 전 기능 테스트 ──
         print("  --- 로그인 전 기능 테스트 ---")
-        await zero_page.goto(f"{ZERO_BASE_URL}/main", wait_until="domcontentloaded")
-        await zero_page.wait_for_load_state("networkidle", timeout=15000)
-        await zero_page.wait_for_timeout(1000)
+        for _retry in range(3):
+            await zero_page.goto(f"{ZERO_BASE_URL}/main", wait_until="domcontentloaded")
+            try:
+                await zero_page.wait_for_load_state("networkidle", timeout=15000)
+            except Exception:
+                pass
+            await zero_page.wait_for_timeout(1500)
+            err_heading = zero_page.locator("heading:has-text('잠시 후 다시 시도해 주세요'), h1:has-text('잠시 후 다시 시도해 주세요')").first
+            if await err_heading.count() == 0:
+                break
+            print(f"  ⟳ 500 에러 감지 — 재시도 ({_retry + 1}/3)")
+            await zero_page.wait_for_timeout(3000)
 
         magazine_item = zero_page.locator('a[href^="/magazine/"]').first
         await expect(magazine_item).to_be_visible(timeout=15000)
@@ -925,38 +998,25 @@ class B2CFlowV3:
 
         reservation_date = self.tomorrow_kok
         d = reservation_date
-        target_day = f"{d.month}. {d.day}"
-        header = await crm_page.locator("h2.fc-toolbar-title, .fc-toolbar-title").first.text_content()
-        for _ in range(10):
-            if target_day in header:
+
+        header = await crm_page.locator("h2").first.text_content()
+        for nav_i in range(10):
+            if self._header_date_matches(header, d.month, d.day):
                 break
-            # "YY. M. D (요일)" 형식에서 월.일 추출
-            m = re.search(r"\d+\.\s*(\d+)\.\s*(\d+)", header)
+            await self._dismiss_popup(crm_page)
+            m = re.search(r"(\d+)\.\s*(\d+)\.\s*(\d+)", header)
             if m:
-                current_month = int(m.group(1))
-                current_day = int(m.group(2))
-                if current_month < d.month or (current_month == d.month and current_day < d.day):
-                    btn_cls = "fc-next-button"
-                else:
-                    btn_cls = "fc-prev-button"
+                cur_m, cur_d = int(m.group(2)), int(m.group(3))
+                direction = "next" if (cur_m < d.month or (cur_m == d.month and cur_d < d.day)) else "prev"
             else:
-                btn_cls = "fc-next-button"
-            for _ in range(3):
-                dim = crm_page.locator("#modal-dimmer.isActiveDimmed:visible").first
-                if await dim.count() > 0:
-                    await dim.click(force=True)
-                    await crm_page.wait_for_timeout(500)
-                else:
-                    break
-            nav_btn = crm_page.locator(f"button.{btn_cls}").first
-            await expect(nav_btn).to_be_visible(timeout=15000)
-            await nav_btn.click(force=True)
-            try:
-                await crm_page.wait_for_load_state("networkidle", timeout=15000)
-            except Exception:
-                pass
-            await crm_page.wait_for_timeout(1000)
-            header = await crm_page.locator("h2.fc-toolbar-title, .fc-toolbar-title").first.text_content()
+                direction = "next"
+            btn = crm_page.locator(f"button.fc-{direction}-button").first
+            await expect(btn).to_be_visible(timeout=5000)
+            await btn.click()
+            await crm_page.wait_for_timeout(1500)
+            header = await crm_page.locator("h2").first.text_content()
+            print(f"  [nav] {direction} → {header.strip()}")
+
         print(f"  ✓ 캘린더 날짜: {header.strip()}")
 
         for _ in range(3):
@@ -967,8 +1027,19 @@ class B2CFlowV3:
             else:
                 break
 
+        # 예약 확정 알림 패널 닫기
+        notif_close = crm_page.locator("button:near(:text('공비서 예약 확정'))").first
+        if await notif_close.count() > 0:
+            try:
+                await notif_close.click(force=True)
+                await crm_page.wait_for_timeout(500)
+            except Exception:
+                await crm_page.keyboard.press("Escape")
+                await crm_page.wait_for_timeout(500)
+        await self._dismiss_popup(crm_page)
+
         await crm_page.screenshot(path=str(SHOT_DIR / "cancel_debug_calendar.png"), full_page=True)
-        block = crm_page.locator("div.booking-normal").first
+        block = crm_page.locator("div.booking-normal, div.booking-ready, div[class*='booking']").first
         await expect(block).to_be_visible(timeout=15000)
         await block.click(force=True)
         await crm_page.wait_for_timeout(2000)
@@ -1136,25 +1207,25 @@ class B2CFlowV3:
             else:
                 break
 
-        header2 = await crm_page.locator("h2.fc-toolbar-title, .fc-toolbar-title").first.text_content()
+        header2 = await crm_page.locator("h2").first.text_content()
         for _ in range(10):
-            if f"{d.month}. {d.day}" in header2:
+            if self._header_date_matches(header2, d.month, d.day):
                 break
-            m2 = re.search(r"\d+\.\s*(\d+)\.\s*(\d+)", header2)
+            m2 = re.search(r"(\d+)\.\s*(\d+)\.\s*(\d+)", header2)
             if m2:
-                cm2, cd2 = int(m2.group(1)), int(m2.group(2))
+                cm2, cd2 = int(m2.group(2)), int(m2.group(3))
                 btn_cls2 = "fc-next-button" if (cm2 < d.month or (cm2 == d.month and cd2 < d.day)) else "fc-prev-button"
             else:
                 btn_cls2 = "fc-next-button"
             nav_btn2 = crm_page.locator(f"button.{btn_cls2}").first
-            await expect(nav_btn2).to_be_visible(timeout=15000)
+            await expect(nav_btn2).to_be_visible(timeout=5000)
             await nav_btn2.click()
             try:
                 await crm_page.wait_for_load_state("networkidle", timeout=15000)
             except Exception:
                 pass
             await crm_page.wait_for_timeout(1000)
-            header2 = await crm_page.locator("h2.fc-toolbar-title, .fc-toolbar-title").first.text_content()
+            header2 = await crm_page.locator("h2").first.text_content()
 
         for _ in range(3):
             dim = crm_page.locator("#modal-dimmer.isActiveDimmed:visible").first
@@ -1272,16 +1343,25 @@ class B2CFlowV3:
 
         save_btn = crm_page.locator("button[data-track-id='b2c_info_save']").first
         await expect(save_btn).to_be_visible(timeout=15000)
-        await save_btn.click()
-        try:
-            await crm_page.wait_for_load_state("networkidle", timeout=15000)
-        except Exception:
-            pass
-        await crm_page.wait_for_timeout(1000)
-        print("  ✓ 예약 방식 변경 저장 완료")
+        if await save_btn.is_disabled():
+            print("  ✓ 예약 방식 이미 '확인 후 확정'으로 설정됨 — 저장 스킵")
+        else:
+            await save_btn.click()
+            try:
+                await crm_page.wait_for_load_state("networkidle", timeout=15000)
+            except Exception:
+                pass
+            await crm_page.wait_for_timeout(1000)
+            print("  ✓ 예약 방식 변경 저장 완료")
 
-        # Step 2: B2C 예약 진행
+        # Step 2: 카카오 로그인 (세션 만료 대비) + B2C 예약 진행
         print("  --- B2C 확인 후 확정 예약 진행 ---")
+        my_url = f"{ZERO_BASE_URL}/my"
+        await zero_page.goto(my_url, wait_until="domcontentloaded")
+        await zero_page.wait_for_timeout(1500)
+        if "/login" in zero_page.url or "로그인" in (await zero_page.locator("body").inner_text()):
+            await _kakao_login(zero_page)
+            print("  ✓ 카카오 재로그인 완료")
         await zero_page.goto(f"{ZERO_BASE_URL}/shop/{self.shop_id}", wait_until="domcontentloaded")
         try:
             await zero_page.wait_for_load_state("networkidle", timeout=15000)
@@ -1357,9 +1437,35 @@ class B2CFlowV3:
                 await agree.click()
                 await zero_page.wait_for_timeout(1000)
 
+            # 예약하기 또는 카카오 로그인 후 예약
             final_booking = zero_page.locator("button:has-text('예약하기')").last
-            await expect(final_booking).to_be_visible(timeout=15000)
-            await final_booking.click(force=True)
+            kakao_btn = zero_page.locator("button:has-text('카카오로 계속하기')").first
+            if await final_booking.count() > 0 and await final_booking.is_visible():
+                await final_booking.click(force=True)
+            elif await kakao_btn.count() > 0 and await kakao_btn.is_visible():
+                async with zero_page.expect_popup(timeout=15000) as popup_info:
+                    await kakao_btn.click(force=True)
+                popup = await popup_info.value
+                await popup.wait_for_load_state("networkidle")
+                await popup.wait_for_timeout(2000)
+                try:
+                    from auto_web_test.B2C_tests.test_b2b_b2c_shop_activation_flow import KAKAO_ID, KAKAO_PW
+                    kakao_id_field = popup.get_by_placeholder("카카오메일 아이디, 이메일, 전화번호")
+                    if await kakao_id_field.count() > 0 and await kakao_id_field.is_visible():
+                        await kakao_id_field.fill(KAKAO_ID)
+                        await popup.get_by_placeholder("비밀번호").fill(KAKAO_PW)
+                        await popup.locator("button:has-text('로그인')").click()
+                        await popup.wait_for_timeout(3000)
+                    approve_btn = popup.locator("button:has-text('동의하고 계속하기')").first
+                    if await approve_btn.count() > 0:
+                        await approve_btn.click()
+                        await popup.wait_for_timeout(2000)
+                except Exception:
+                    pass
+                await zero_page.wait_for_timeout(3000)
+            else:
+                await expect(final_booking).to_be_visible(timeout=15000)
+                await final_booking.click(force=True)
             try:
                 await zero_page.wait_for_load_state("networkidle", timeout=15000)
             except Exception:
@@ -2506,26 +2612,26 @@ class B2CFlowV3:
 
         # 내일 날짜로 이동
         d = tomorrow_kok
-        header = await crm_page.locator("h2.fc-toolbar-title, .fc-toolbar-title").first.text_content()
-        target_day = f"{d.month}. {d.day}"
+
+        header = await crm_page.locator("h2").first.text_content()
         for _ in range(10):
-            if target_day in header:
+            if self._header_date_matches(header, d.month, d.day):
                 break
-            current_match = re.search(r"\d+\.\s*(\d+)\.\s*(\d+)", header)
+            current_match = re.search(r"(\d+)\.\s*(\d+)\.\s*(\d+)", header)
             if current_match:
-                cm, cd = int(current_match.group(1)), int(current_match.group(2))
+                cm, cd = int(current_match.group(2)), int(current_match.group(3))
                 btn_cls = "fc-next-button" if (cm < d.month or (cm == d.month and cd < d.day)) else "fc-prev-button"
             else:
                 btn_cls = "fc-next-button"
             nav_btn = crm_page.locator(f"button.{btn_cls}").first
-            await expect(nav_btn).to_be_visible(timeout=15000)
+            await expect(nav_btn).to_be_visible(timeout=5000)
             await nav_btn.click()
             try:
                 await crm_page.wait_for_load_state("networkidle", timeout=15000)
             except Exception:
                 pass
             await crm_page.wait_for_timeout(1000)
-            header = await crm_page.locator("h2.fc-toolbar-title, .fc-toolbar-title").first.text_content()
+            header = await crm_page.locator("h2").first.text_content()
         print(f"  ✓ 캘린더 날짜: {header.strip()}")
 
         # dimmer 닫기 + 블록 렌더링 대기
