@@ -526,7 +526,7 @@ class ReservationMixin:
         await expect(time_dropdown).to_be_visible(timeout=5000)
         await time_dropdown.click(force=True)
         await self.page.wait_for_timeout(1000)
-        time_option = self.page.locator("li button p:text-is('오후 6:30')").first
+        time_option = self.page.locator("li button p:text-is('오후 6:00')").first
         await time_option.scroll_into_view_if_needed(timeout=3000)
         await time_option.click()
         await self.page.wait_for_timeout(500)
@@ -536,7 +536,7 @@ class ReservationMixin:
         await self.page.wait_for_timeout(300)
         await self.page.locator("button:has-text('젤 기본'):visible").first.click()
         await self.page.wait_for_timeout(300)
-        print("  ✓ 오후 6:30, 발 > 젤 기본")
+        print("  ✓ 오후 6:00, 발 > 젤 기본")
 
         register_btn = modal.locator("button:has-text('등록'):visible").first
         await expect(register_btn).to_be_visible(timeout=3000)
