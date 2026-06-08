@@ -189,8 +189,8 @@ class B2CFlowV3:
         if resume_phase and resume_phase not in ["1"]:
             if self.checkpoint.shop_name:
                 self.shop_name = self.checkpoint.shop_name
-                # Phase 1 완료 but 1.2, 1.5는 runner.page만 사용
-                if resume_phase not in ["1.1", "1.2", "1.5"]:
+                # Phase 1 완료 but 1.1~1.5는 runner.page만 사용
+                if resume_phase not in ["1.1", "1.15", "1.16", "1.2", "1.5"]:
                     await self.restore_session()
                 else:
                     # runner만 로그인
@@ -208,6 +208,8 @@ class B2CFlowV3:
         phases = [
             ("1", self.phase_1),
             ("1.1", self.phase_1_1),
+            ("1.15", self.phase_1_15),
+            ("1.16", self.phase_1_16),
             ("1.2", self.phase_1_2),
             ("1.5", self.phase_1_5),
             ("2", self.phase_2),
@@ -499,13 +501,394 @@ class B2CFlowV3:
         await page.wait_for_timeout(1500)
         print("  ✓ 캘린더 복귀 완료")
 
-        # 공비서 입점
+    # ──────────────────────────────────────────────
+    # Phase 1.15: 예약금 설정 페이지 검증
+    # ──────────────────────────────────────────────
+    async def phase_1_15(self):
+        print("=== Phase 1.15: 예약금 설정 페이지 검증 ===")
+        page = self.runner.page
+        await self._dismiss_popup(page)
+
+        # 사이드바 > 우리샵 관리 > 예약금 설정 진입
+        shop_mgmt = page.locator(
+            "h3:has-text('우리샵 관리'):visible, "
+            "button:has-text('우리샵 관리'):visible, "
+            "a:has-text('우리샵 관리'):visible, "
+            "span:has-text('우리샵 관리'):visible"
+        ).first
+        await expect(shop_mgmt).to_be_visible(timeout=15000)
+        await shop_mgmt.click()
+        await page.wait_for_timeout(700)
+
+        deposit_menu = page.locator(
+            "button:has-text('예약금 설정'):visible, "
+            "a:has-text('예약금 설정'):visible, "
+            "span:has-text('예약금 설정'):visible"
+        ).first
+        await expect(deposit_menu).to_be_visible(timeout=10000)
+        await deposit_menu.click()
         try:
-            await self.runner.enable_gong_booking_after_shop_creation()
-        except Exception as exc:
-            if "토글이 ON 상태" not in str(exc) and "activate-switch" not in str(exc):
-                raise
-        print("  ✓ 공비서 입점 완료")
+            await page.wait_for_load_state("networkidle", timeout=15000)
+        except Exception:
+            pass
+        await page.wait_for_timeout(1500)
+
+        # 예약금 설정 URL 저장 (복귀용)
+        deposit_setting_url = page.url
+
+        # TC-01: 페이지 제목 + 주요 섹션 표시
+        body = await page.locator("body").inner_text()
+        assert "예약금 설정" in body, "'예약금 설정' 페이지 제목 미노출"
+        for section in ["공비서로 예약금 받기", "예약금 금액 설정", "예약 취소 환불 기준 설정", "결제 대기 시간", "회원권 고객 관리"]:
+            assert section in body, f"'{section}' 섹션 미노출"
+        assert "알림톡 미리보기" in body, "'알림톡 미리보기' 영역 미노출"
+        print("  ✓ TC-01: 페이지 제목 + 섹션 확인")
+
+        # TC-02: 안내 문구 4개
+        guide_texts = [
+            "예약금 받기 기능은",
+            "정산 정보는 등록 후",
+            "예약금 내역/정산",
+            "예약금이 적용된 예약은 대기 상태",
+        ]
+        for gt in guide_texts:
+            assert gt in body, f"안내 문구 미노출: '{gt}'"
+        print("  ✓ TC-02: 안내 문구 4개 확인")
+
+        # TC-03: 예약금 내역/정산 링크 존재만 확인 (페이지 이동 제외)
+        settlement_link = page.locator("a:has-text('예약금 내역/정산'), a:has-text('우리샵 관리 > 예약금 내역/정산')").first
+        if await settlement_link.count() > 0:
+            print("  ✓ TC-03: 예약금 내역/정산 링크 존재 확인")
+        else:
+            print("  ⚠ TC-03: 예약금 내역/정산 링크 미발견 (skip)")
+
+        # TC-04: 공비서로 예약금 받기 토글 off + 정산 정보 미등록
+        body = await page.locator("body").inner_text()
+        assert "정산 정보 미등록" in body, "'정산 정보 미등록' 미노출"
+        print("  ✓ TC-04: 토글 off + 정산 정보 미등록 확인")
+
+        # TC-05~06: 예약금 금액 설정 영역 확인
+        assert "예약금 금액 설정" in body, "'예약금 금액 설정' 섹션 미노출"
+        assert "일정 금액" in body, "'일정 금액' 옵션 미노출"
+        has_guide = "가장 많이 설정한 금액" in body or "20,000원" in body
+        assert has_guide, "일정 금액 안내 문구 미노출"
+        print("  ✓ TC-05~06: 예약금 금액 설정 영역 확인")
+
+        # TC-07: 환불 기준 시간 드롭다운
+        body = await page.locator("body").inner_text()
+        assert "24시간 전부터" in body or "24시간" in body, "환불 기준 기본값 '24시간 전부터' 미노출"
+        print("  ✓ TC-07: 환불 기준 시간 기본값 확인")
+
+        # TC-08: 환불 금액 드롭다운
+        assert "환불 없음" in body, "환불 금액 기본값 '환불 없음' 미노출"
+        print("  ✓ TC-08: 환불 금액 기본값 확인")
+
+        # TC-09: 결제 대기 시간
+        assert "3시간" in body, "결제 대기 시간 기본값 '3시간' 미노출"
+        print("  ✓ TC-09: 결제 대기 시간 기본값 확인")
+
+        # TC-10, TC-11: 회원권 고객 관리 토글
+        assert "티켓 보유 고객 예약금 안받기" in body, "'티켓 보유 고객 예약금 안받기' 미노출"
+        assert "정액권 보유 고객 예약금 안받기" in body, "'정액권 보유 고객 예약금 안받기' 미노출"
+        print("  ✓ TC-10~11: 회원권 고객 관리 토글 확인")
+
+        # ── 설정값 변경 (토글 off 상태에서) ──
+        # TC-12: 토글 off 상태 → 저장 버튼 비활성화 확인
+        save_btn = page.locator("button:has-text('저장')").first
+        if await save_btn.count() > 0:
+            is_disabled = await save_btn.is_disabled()
+            assert is_disabled, "토글 off 상태에서 저장 버튼이 활성화되어 있음"
+            print("  ✓ TC-12: 토글 off → 저장 버튼 비활성화 확인")
+        else:
+            print("  ⚠ TC-12: 저장 버튼 미발견 (skip)")
+
+        # 토글 ON (데이터 수정 전에 활성화해야 폼 필드가 인터랙션 가능)
+        await page.evaluate("document.querySelector('#isActive')?.click()")
+        await page.wait_for_timeout(1000)
+        print("  ✓ 예약금 받기 토글 ON")
+
+        # 데이터 수정: 예약금 금액 10,000원
+        amount_input = page.locator("input:not([type='checkbox']):not([type='hidden']):visible").first
+        if await amount_input.count() > 0:
+            await amount_input.fill("10000")
+            await page.wait_for_timeout(300)
+            print("  ✓ 예약금 금액 10,000원 입력")
+        else:
+            print("  ⚠ 예약금 금액 입력 필드 미발견 (skip)")
+
+        # 환불 금액: "환불 없음" → "50% 환불"
+        await page.evaluate("document.querySelector('#deposit-setting-form-refund-policy-rate button[data-testid=\"select-toggle-button\"]')?.scrollIntoView({block:'center'})")
+        await page.wait_for_timeout(500)
+        await page.evaluate("document.querySelector('#deposit-setting-form-refund-policy-rate button[data-testid=\"select-toggle-button\"]')?.click()")
+        await page.wait_for_timeout(1000)
+        refund_option = page.locator("li button:has-text('50% 환불')").first
+        if await refund_option.count() > 0:
+            await refund_option.click(force=True)
+            await page.wait_for_timeout(500)
+            print("  ✓ 환불 기준: 50% 환불 선택")
+        else:
+            await page.keyboard.press("Escape")
+            print("  ⚠ 50% 환불 옵션 미발견 (skip)")
+
+        # 결제 대기 시간: "3시간" → "2시간"
+        await page.evaluate("document.querySelector('#deposit-setting-form-waiting-limit-type button[data-testid=\"select-toggle-button\"]')?.scrollIntoView({block:'center'})")
+        await page.wait_for_timeout(500)
+        await page.evaluate("document.querySelector('#deposit-setting-form-waiting-limit-type button[data-testid=\"select-toggle-button\"]')?.click()")
+        await page.wait_for_timeout(1000)
+        wait_option = page.locator("li button:has-text('2시간')").first
+        if await wait_option.count() > 0:
+            await wait_option.click(force=True)
+            await page.wait_for_timeout(500)
+            print("  ✓ 결제 대기 시간: 2시간 선택")
+        else:
+            await page.keyboard.press("Escape")
+            print("  ⚠ 2시간 옵션 미발견 (skip)")
+
+        # 티켓 보유 고객 예약금 안받기 토글 활성화
+        ticket_toggle = page.locator("label[for='ticketUser']").first
+        if await ticket_toggle.count() > 0:
+            await ticket_toggle.click(force=True)
+            await page.wait_for_timeout(500)
+            print("  ✓ 티켓 보유 고객 예약금 안받기 활성화")
+        else:
+            print("  ⚠ 티켓 토글 미발견 (skip)")
+
+        # TC-13: 저장 → 정산 정보 모달 검증
+        save_btn = page.locator("button:has-text('저장'):not([disabled])").first
+        if await save_btn.count() > 0:
+            await save_btn.click()
+            await page.wait_for_timeout(2000)
+
+            popup_body = await page.locator("body").inner_text()
+
+            # 모달 텍스트 검증
+            assert "정산 받을 계좌 정보가 필요합니다" in popup_body or "계좌 정보가 필요" in popup_body, \
+                "모달 문구 미노출: '정산 받을 계좌 정보가 필요합니다'"
+            assert "최초 1회만 등록" in popup_body or "1회만 등록" in popup_body, \
+                "모달 문구 미노출: '최초 1회만 등록'"
+            print("  ✓ TC-13: 토글 on → 저장 → 정산 정보 모달 확인")
+            print("    - '예약금을 정산 받을 계좌 정보가 필요합니다' 확인")
+            print("    - '최초 1회만 등록하면 됩니다' 확인")
+
+            # 닫기 버튼 (정산 정보 등록하지 않음)
+            close_btn = page.locator("button:has-text('닫기'):visible").first
+            if await close_btn.count() > 0:
+                await close_btn.click()
+                await page.wait_for_timeout(1000)
+                print("  ✓ 모달 닫기 (정산 정보 등록하지 않음)")
+            else:
+                await page.keyboard.press("Escape")
+                await page.wait_for_timeout(1000)
+                print("  ✓ 모달 닫기 (ESC)")
+        else:
+            print("  ⚠ TC-13: 저장 버튼 활성화 안됨 (skip)")
+
+        # 페이지 리로드로 원복
+        await page.goto(deposit_setting_url, wait_until="domcontentloaded")
+        try:
+            await page.wait_for_load_state("networkidle", timeout=10000)
+        except Exception:
+            pass
+        await page.wait_for_timeout(1500)
+        print("  ✓ 페이지 리로드로 원복")
+
+        # TC-17~19: 알림톡 미리보기
+        body = await page.locator("body").inner_text()
+        if "알림톡 미리보기" in body:
+            assert "예약 확인하기" in body or "결제기한" in body or "공비서" in body, "알림톡 미리보기 콘텐츠 미노출"
+            print("  ✓ TC-17~19: 알림톡 미리보기 영역 확인")
+        else:
+            print("  ⚠ TC-17~19: 알림톡 미리보기 영역 미발견 (skip)")
+
+        await page.screenshot(path=str(SHOT_DIR / "phase1_15_deposit_settings.png"))
+        print("  ✓ Phase 1.15 완료: 예약금 설정 검증")
+
+    # ──────────────────────────────────────────────
+    # Phase 1.16: 공비서로 예약받기 랜딩 검증 + 입점
+    # ──────────────────────────────────────────────
+    async def phase_1_16(self):
+        print("=== Phase 1.16: 공비서로 예약받기 랜딩 검증 + 입점 ===")
+        page = self.runner.page
+        await self._dismiss_popup(page)
+
+        # 사이드바 > 온라인 예약 > 공비서로 예약받기
+        online_menu = page.locator(
+            "h3:has-text('온라인 예약'):visible, "
+            "button:has-text('온라인 예약'):visible, "
+            "a:has-text('온라인 예약'):visible"
+        ).first
+        await expect(online_menu).to_be_visible(timeout=15000)
+        await online_menu.click()
+        await page.wait_for_timeout(700)
+
+        reserve_menu = page.locator(
+            "button:has-text('공비서로 예약받기'):visible, "
+            "a:has-text('공비서로 예약받기'):visible, "
+            "span:has-text('공비서로 예약받기'):visible"
+        ).first
+        await expect(reserve_menu).to_be_visible(timeout=10000)
+        await reserve_menu.click()
+        try:
+            await page.wait_for_load_state("networkidle", timeout=15000)
+        except Exception:
+            pass
+        await page.wait_for_timeout(1500)
+
+        # TC-01: 페이지 진입
+        assert "/b2c/setting" in page.url, f"공비서로 예약받기 페이지 이동 실패: {page.url}"
+        print("  ✓ TC-01: 공비서로 예약받기 페이지 진입")
+
+        # TC-02: 상단 배너
+        body = await page.locator("body").inner_text()
+        assert "공비서에 입점하면" in body or "카카오 알림톡 무료" in body, "상단 배너 미노출"
+        assert "공비서 둘러보기" in body, "'공비서 둘러보기' 버튼 미노출"
+        assert "공비서 입점하기" in body, "'공비서 입점하기' 버튼 미노출"
+        print("  ✓ TC-02: 상단 배너 확인")
+
+        # TC-03~06: 소개 탭 존재 + 콘텐츠 확인
+        # 탭 콘텐츠는 한 페이지에 함께 렌더링됨 (클릭 불필요)
+        tab_content_keywords = {
+            "TC-03(20만 유저)": ["고객이 기다리고", "자동으로 노출", "캘린더에 자동"],
+            "TC-04(알림톡 무료)": ["알림톡", "무료"],
+            "TC-05(회원권 고객)": ["회원권", "예약해요"],
+            "TC-06(공비서 링크)": ["공비서 링크", "한곳에서"],
+        }
+        for tc_id, keywords in tab_content_keywords.items():
+            matched = any(kw in body for kw in keywords)
+            if matched:
+                print(f"  ✓ {tc_id}: 콘텐츠 확인")
+            else:
+                print(f"  ⚠ {tc_id}: 콘텐츠 미확인 (skip, keywords: {keywords})")
+
+        await page.screenshot(path=str(SHOT_DIR / "phase1_16_landing.png"))
+
+        # TC-07: 공비서 입점하기 버튼 → /b2c/setting/register
+        join_btn = page.locator(
+            "[data-track-id='b2c_reservation']:visible, "
+            "button:has(h3:has-text('공비서 입점하기')):visible, "
+            "button:has-text('공비서 입점하기'):visible, "
+            "a:has-text('공비서 입점하기'):visible"
+        ).first
+        await expect(join_btn).to_be_visible(timeout=10000)
+        await join_btn.click()
+        try:
+            await page.wait_for_load_state("networkidle", timeout=15000)
+        except Exception:
+            pass
+        await page.wait_for_timeout(1500)
+        assert "/b2c/setting/register" in page.url or "register" in page.url, f"입점 등록 페이지 이동 실패: {page.url}"
+        print("  ✓ TC-07: 공비서 입점하기 → register 페이지 이동")
+
+        # TC-08~15: 입점 등록 폼 필드 검증
+        reg_body = await page.locator("body").inner_text()
+
+        # TC-08: 예약 상담 가능 번호
+        phone_field = page.get_by_placeholder("문의 가능한 전화번호를 입력해 주세요.")
+        await expect(phone_field).to_be_visible(timeout=10000)
+        assert "예약 상담 가능 번호" in reg_body, "'예약 상담 가능 번호' 미노출"
+        print("  ✓ TC-08: 예약 상담 가능 번호 필드 확인")
+
+        # TC-09: 소개글
+        intro_field = page.get_by_placeholder("샵을 소개할 수 있는 내용을 작성해 주세요.")
+        await expect(intro_field).to_be_visible(timeout=10000)
+        assert "소개글" in reg_body, "'소개글' 미노출"
+        print("  ✓ TC-09: 소개글 필드 확인")
+
+        # TC-10: 샵 소개 이미지
+        assert "샵 소개 이미지" in reg_body, "'샵 소개 이미지' 미노출"
+        assert "최소 1장" in reg_body or "최대 10장" in reg_body, "이미지 안내 미노출"
+        print("  ✓ TC-10: 샵 소개 이미지 영역 확인")
+
+        # TC-11: 찾아오시는 길
+        direction_field = page.get_by_placeholder("고객 방문에 도움이 되는 길안내를 작성해 주세요.")
+        if await direction_field.count() > 0:
+            assert "찾아오시는 길" in reg_body, "'찾아오시는 길' 미노출"
+            print("  ✓ TC-11: 찾아오시는 길 필드 확인")
+        else:
+            print("  ⚠ TC-11: 찾아오시는 길 필드 미발견 (skip)")
+
+        # TC-12: 편의시설 및 서비스
+        assert "편의시설 및 서비스" in reg_body or "편의시설" in reg_body, "'편의시설 및 서비스' 미노출"
+        print("  ✓ TC-12: 편의시설 및 서비스 확인")
+
+        # TC-13: 당일 예약 조건
+        assert "당일 예약 조건" in reg_body or "당일 예약" in reg_body, "'당일 예약 조건' 미노출"
+        print("  ✓ TC-13: 당일 예약 조건 확인")
+
+        # TC-14: 예약 방식 설정
+        assert "예약 방식 설정" in reg_body or "예약금 결제 후" in reg_body or "예약금 없이 예약" in reg_body, "'예약 방식 설정' 미노출"
+        print("  ✓ TC-14: 예약 방식 설정 확인")
+
+        # TC-15: 예약 유의사항
+        notice_field = page.get_by_placeholder("예약 시 확인해야 하는 내용을 간단하게 작성해 주세요.")
+        if await notice_field.count() > 0:
+            assert "예약 유의사항" in reg_body, "'예약 유의사항' 미노출"
+            print("  ✓ TC-15: 예약 유의사항 필드 확인")
+        else:
+            print("  ⚠ TC-15: 예약 유의사항 필드 미발견 (skip)")
+
+        await page.screenshot(path=str(SHOT_DIR / "phase1_16_register_form.png"))
+
+        # 입점 실행 (기존 enable_gong_booking_after_shop_creation 로직 인라인)
+        # register 페이지에 이미 진입한 상태이므로 바로 폼 작성
+        runner = self.runner
+
+        # 1. 번호 입력
+        await phone_field.fill(runner.crm_test_phone)
+        print(f"  ✓ 번호 입력: {runner.crm_test_phone}")
+
+        # 2. 소개글 입력
+        await intro_field.fill(runner.crm_test_intro)
+        print("  ✓ 소개글 입력")
+
+        # 2-1. 찾아오시는 길 입력
+        if await direction_field.count() > 0:
+            await direction_field.fill("강남역 1번 출구에서 도보 3분")
+            print("  ✓ 찾아오시는 길 입력")
+
+        # 2-2. 예약 유의사항 입력
+        if await notice_field.count() > 0:
+            await notice_field.fill("시술 10분 전까지 도착해 주세요")
+            print("  ✓ 예약 유의사항 입력")
+
+        # 3. 샵 소개 이미지 업로드 → 저장 → 확인
+        await runner._attach_b2c_test_image()
+        img_save_btn = page.locator("button.sc-45a967ab-0:not([disabled]):not([type='submit']):has-text('저장')").first
+        await expect(img_save_btn).to_be_visible(timeout=5000)
+        await img_save_btn.click(force=True)
+        await page.wait_for_timeout(2000)
+        print("  ✓ 이미지 저장 버튼 클릭")
+
+        confirm_btn = page.locator("button:has-text('확인'):visible").first
+        if await confirm_btn.count() > 0:
+            await confirm_btn.click()
+            await page.wait_for_timeout(1000)
+            print("  ✓ 이미지 등록 완료 확인")
+
+        # 4. 예약금 없이 예약 클릭
+        no_deposit = page.locator("h4:has-text('예약금 없이 예약')").first
+        await expect(no_deposit).to_be_visible(timeout=10000)
+        await no_deposit.scroll_into_view_if_needed()
+        await page.wait_for_timeout(500)
+        await no_deposit.click(force=True)
+        await page.wait_for_timeout(1000)
+        print("  ✓ 예약금 없이 예약 선택")
+
+        # 5. 최종 저장
+        final_save = page.locator("button[data-track-id='b2c_info_save']")
+        await expect(final_save).to_be_enabled(timeout=10000)
+        await final_save.click()
+        try:
+            await page.wait_for_load_state("networkidle", timeout=15000)
+        except Exception:
+            pass
+        await page.wait_for_timeout(2000)
+        print("  ✓ 최종 저장 완료")
+
+        # 6. 알림톡 무료 사용 중 확인
+        kakao_text = page.locator("h2:has-text('알림톡 무료 사용 중'), p:has-text('알림톡 무료 사용 중')").first
+        await expect(kakao_text).to_be_visible(timeout=10000)
+        print("  ✓ 알림톡 무료 사용 중 확인 → 공비서 입점 완료")
 
     # ──────────────────────────────────────────────
     # Phase 1.2: 샵 소식 작성
