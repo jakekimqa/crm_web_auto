@@ -536,6 +536,20 @@ class B2CFlowV3:
         # 예약금 설정 URL 저장 (복귀용)
         deposit_setting_url = page.url
 
+        # 새 샵 생성 직후 "서비스와 연결할 수 없습니다" 에러 방어 — 최대 3회 리로드
+        for retry in range(3):
+            body = await page.locator("body").inner_text()
+            if "연결할 수 없습니다" not in body:
+                break
+            print(f"  ⚠ 예약금 설정 페이지 서버 에러 — 재시도 {retry + 1}/3")
+            await page.wait_for_timeout(3000)
+            await page.reload(wait_until="domcontentloaded")
+            try:
+                await page.wait_for_load_state("networkidle", timeout=15000)
+            except Exception:
+                pass
+            await page.wait_for_timeout(1500)
+
         # TC-01: 페이지 제목 + 주요 섹션 표시
         body = await page.locator("body").inner_text()
         assert "예약금 설정" in body, "'예약금 설정' 페이지 제목 미노출"
